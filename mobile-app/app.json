@@ -5,11 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "owner": "dtalero",
-    "extra": {
-      "eas": {
-        "projectId": "76240d22-2a6e-40e9-b67a-434817daaea5"
-      }
-    },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -35,7 +30,10 @@
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "INTERNET"
+        "INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "edgeToEdgeEnabled": true
     },
@@ -73,6 +71,11 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5ed9d19b-b31a-4e5a-9e0b-1dc2c411a5cb"
+      }
+    }
   }
 }

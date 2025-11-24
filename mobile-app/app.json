@@ -4,6 +4,7 @@
     "slug": "bsl-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "buildNumber": "2",
     "owner": "dtalero",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -42,6 +43,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withDisableBitcode.js",
       [
         "expo-camera",
         {

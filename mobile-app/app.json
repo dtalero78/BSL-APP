@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BSL Paciente",
-    "slug": "bsl-paciente",
+    "slug": "bsl-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "owner": "dtalero",

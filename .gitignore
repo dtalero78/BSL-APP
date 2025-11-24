@@ -2,3 +2,8 @@ node_modules/
 .env
 .DS_Store
 *.log
+
+# Expo
+mobile-app/.expo/
+mobile-app/dist/
+mobile-app/.expo-shared

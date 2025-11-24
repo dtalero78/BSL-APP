@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "BSL Paciente",
+    "slug": "bsl-paciente",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#667eea"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bsl.paciente",
+      "infoPlist": {
+        "NSCameraUsageDescription": "La app necesita acceso a la cámara para las videollamadas con el médico.",
+        "NSMicrophoneUsageDescription": "La app necesita acceso al micrófono para las videollamadas con el médico."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#667eea"
+      },
+      "package": "com.bsl.paciente",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "La app necesita acceso a la cámara para las videollamadas."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "La app necesita acceso al micrófono para las videollamadas."
+        }
+      ]
+    ]
+  }
+}

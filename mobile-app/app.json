@@ -4,6 +4,12 @@
     "slug": "bsl-paciente",
     "version": "1.0.0",
     "orientation": "portrait",
+    "owner": "dtalero",
+    "extra": {
+      "eas": {
+        "projectId": "bsl-paciente-app"
+      }
+    },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,

@@ -48,6 +48,24 @@
         {
           "microphonePermission": "La app necesita acceso al micrófono para las videollamadas."
         }
+      ],
+      [
+        "react-native-twilio-video-webrtc",
+        {
+          "cameraPermission": "La app necesita acceso a la cámara para las videollamadas con el médico.",
+          "microphonePermission": "La app necesita acceso al micrófono para las videollamadas con el médico."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 21
+          },
+          "ios": {
+            "deploymentTarget": "11.0"
+          }
+        }
       ]
     ]
   }

@@ -1,6 +1,14 @@
-# 📱 BSL Paciente - App Móvil
+# 📱 BSL Paciente - App Móvil con Twilio Video
 
-Aplicación móvil React Native con Expo para que los pacientes llamen al médico.
+Aplicación móvil React Native con Expo para que los pacientes llamen al médico con **videollamadas reales usando Twilio Video SDK nativo**.
+
+## ✨ Características
+
+✅ **Videollamadas Reales** - Twilio Video SDK nativo integrado
+✅ **Socket.IO** - Notificaciones en tiempo real
+✅ **Controles de Video** - Mute, cámara on/off, flip camera
+✅ **UI Minimalista** - Botón grande y fácil de usar
+✅ **Permisos Nativos** - Manejo automático de permisos
 
 ## 🚀 Inicio Rápido
 
@@ -10,24 +18,17 @@ Aplicación móvil React Native con Expo para que los pacientes llamen al médic
 
 **iOS**: https://apps.apple.com/app/expo-go/id982107779
 
-### 2. Iniciar la app
+### 2. Instalar dependencias
 
 ```bash
 # Asegúrate de estar en la carpeta mobile-app
 cd mobile-app
 
-# Iniciar Expo
-npx expo start
+# Instalar dependencias
+npm install
 ```
 
-### 3. Escanear QR
-
-- **Android**: Abre Expo Go y escanea el QR desde la app
-- **iOS**: Abre la cámara y escanea el QR (te redirigirá a Expo Go)
-
-## ⚙️ Configuración
-
-### Conectar con tu servidor
+### 3. Configurar servidor
 
 Edita `config.js`:
 
@@ -41,170 +42,256 @@ export const config = {
 };
 ```
 
-**Importante**:
-- En desarrollo, usa tu IP local (no localhost)
-- Encuentra tu IP: `ifconfig | grep "inet " | grep -v 127.0.0.1`
-- El celular y la computadora deben estar en la misma red WiFi
+**Encontrar tu IP:**
+```bash
+# Mac/Linux:
+ifconfig | grep "inet " | grep -v 127.0.0.1
+
+# Windows:
+ipconfig
+```
+
+### 4. Iniciar en modo desarrollo
+
+```bash
+# Iniciar Expo
+npx expo start
+```
+
+### 5. Escanear QR
+
+- **Android**: Abre Expo Go → Escanea QR
+- **iOS**: Abre Cámara → Escanea QR → Abre en Expo Go
+
+## 🎥 Funcionalidades de Video
+
+La app incluye videollamadas completas con:
+
+- 📹 **Video bidireccional** - Ver y ser visto por el médico
+- 🎤 **Audio bidireccional** - Hablar y escuchar
+- 🔇 **Mute/Unmute** - Control de micrófono
+- 📷 **Video on/off** - Apagar cámara si es necesario
+- 🔄 **Flip camera** - Cambiar entre cámara frontal/trasera
+- 📞 **Finalizar llamada** - Terminar videollamada
 
 ## 📦 Build para Producción
 
-### Android APK
+### Requisitos Previos
 
+1. **Instalar EAS CLI:**
 ```bash
-# Build APK para Android
-eas build --platform android --profile preview
-
-# O si no tienes EAS configurado:
-npx expo prebuild
-cd android
-./gradlew assembleRelease
+npm install -g eas-cli
 ```
 
-### iOS (requiere Mac)
+2. **Login en Expo:**
+```bash
+npx expo login
+```
+
+### Build Development (para testing)
 
 ```bash
-# Build para iOS
-eas build --platform ios --profile preview
+# Configurar EAS (solo la primera vez)
+eas build:configure
+
+# Build para Android (APK)
+eas build --profile development --platform android
+
+# Build para iOS (requiere Mac y cuenta de desarrollador)
+eas build --profile development --platform ios
 ```
+
+### Build Production
+
+```bash
+# Android APK/AAB
+eas build --platform android
+
+# iOS (requiere cuenta Apple Developer)
+eas build --platform ios
+```
+
+**Nota:** El build de producción requiere compilación nativa porque usa `react-native-twilio-video-webrtc`. No funcionará con Expo Go, solo con builds compilados.
 
 ## 🔧 Desarrollo
-
-### Comandos Útiles
-
-```bash
-# Iniciar en modo desarrollo
-npm start
-
-# Limpiar cache
-npx expo start -c
-
-# Ver logs
-npx react-native log-android  # Android
-npx react-native log-ios      # iOS
-```
 
 ### Estructura del Proyecto
 
 ```
 mobile-app/
-├── App.js              # Componente principal
-├── config.js           # Configuración del servidor
-├── app.json           # Configuración de Expo
-├── package.json       # Dependencias
-└── assets/            # Imágenes y recursos
+├── App.js                    # Componente principal con Twilio Video
+├── config.js                 # Configuración del servidor
+├── app.json                  # Configuración de Expo y plugins
+├── package.json              # Dependencias
+└── assets/                   # Imágenes y recursos
 ```
 
-## 📱 Características
+### Dependencias Principales
 
-✅ **Socket.IO** - Notificaciones en tiempo real
-✅ **Permisos** - Solicita cámara y micrófono automáticamente
-✅ **Estado de conexión** - Indica si está conectado al servidor
-✅ **Botón grande** - Fácil de presionar para llamar
-✅ **Diseño minimalista** - Interfaz simple y clara
+- **react-native-twilio-video-webrtc** - SDK nativo de Twilio Video
+- **socket.io-client** - Comunicación en tiempo real
+- **expo-camera** - Permisos de cámara
+- **expo-av** - Permisos de audio
+- **expo-build-properties** - Configuración nativa
 
-## ⚠️ Limitaciones Actuales
-
-La videollamada con Twilio Video SDK requiere implementación nativa más compleja. Tienes 3 opciones:
-
-### Opción 1: WebView (Más Fácil) ✅ Recomendado
-
-Usar la página web existente dentro de un WebView:
+### Comandos Útiles
 
 ```bash
-npm install react-native-webview
+# Iniciar con cache limpio
+npx expo start -c
+
+# Ver en simulador (si está instalado)
+npx expo start --ios
+npx expo start --android
+
+# Ver logs
+npx expo start --dev-client
+
+# Actualizar dependencias
+npm update
 ```
 
-Luego en App.js:
-```javascript
-import { WebView } from 'react-native-webview';
+## ⚙️ Configuración Avanzada
 
-<WebView
-  source={{ uri: 'https://tu-servidor.com/paciente.html' }}
-  mediaPlaybackRequiresUserAction={false}
-  allowsInlineMediaPlayback={true}
-/>
-```
+### iOS Deployment Target
 
-### Opción 2: Twilio Native SDK
+La app requiere iOS 11.0 o superior (configurado en app.json).
 
-Instalar SDK nativo de Twilio:
-```bash
-npm install react-native-twilio-video-webrtc
-```
+### Android Min SDK
 
-Requiere configuración nativa (más complejo).
+Android requiere minSdkVersion 21 (Android 5.0+).
 
-### Opción 3: Seguir usando la versión actual
+### Permisos
 
-La app actual:
-- ✅ Conecta con Socket.IO
-- ✅ Notifica al médico
-- ✅ Recibe aceptación
-- ⚠️ No muestra video (solo simula la llamada)
-
-## 🌐 Deploy con EAS (Expo Application Services)
-
-### 1. Crear cuenta en Expo
-
-```bash
-npx expo login
-```
-
-### 2. Configurar EAS
-
-```bash
-npm install -g eas-cli
-eas build:configure
-```
-
-### 3. Build y Deploy
-
-```bash
-# Build para Android
-eas build --platform android
-
-# Build para iOS
-eas build --platform ios
-
-# Submit a tiendas
-eas submit --platform android
-eas submit --platform ios
-```
-
-## 🔒 Permisos Requeridos
-
-La app solicita automáticamente:
-
-- **CAMERA** - Para videollamadas
-- **RECORD_AUDIO** - Para audio en llamadas
-- **INTERNET** - Para conectar con el servidor
+Configurados automáticamente:
+- CAMERA
+- RECORD_AUDIO
+- INTERNET
+- MODIFY_AUDIO_SETTINGS
 
 ## 🐛 Solución de Problemas
 
-### No se conecta al servidor
-✅ Verifica que el servidor esté corriendo
-✅ Usa tu IP local (no localhost) en desarrollo
+### "No se conecta al servidor"
+
+✅ Verifica que servidor esté corriendo: `curl http://localhost:3001/health`
+✅ Usa tu IP local, no localhost
 ✅ Asegúrate de estar en la misma red WiFi
 
-### No pide permisos
-✅ Reinstala la app
-✅ Revisa configuración en app.json
-✅ Verifica permisos manualmente en ajustes del celular
+### "El video no se muestra"
 
-### Error al escanear QR
-✅ Asegúrate de tener Expo Go instalado
-✅ Intenta con `npm start` y selecciona tunnel
+✅ Verifica permisos de cámara/micrófono
+✅ Revisa logs: `npx expo start` (ver errores en consola)
+✅ Asegúrate de que el médico también esté conectado
 
-## 📝 Próximos Pasos
+### "Error: Task ':react-native-twilio-video-webrtc:...' "
 
-1. Implementar WebView para video completo
-2. Agregar diseño personalizado
-3. Notificaciones push cuando el médico esté disponible
-4. Historial de llamadas
-5. Chat de texto como alternativa
+Esto es normal en Expo Go. Para probar video real necesitas:
+```bash
+eas build --profile development --platform android
+```
+
+### "No funciona en Expo Go"
+
+**Correcto.** Twilio Video requiere módulos nativos que no están en Expo Go.
+
+**Opciones:**
+1. **Development Build**: `eas build --profile development` (recomendado)
+2. **Prebuild**: `npx expo prebuild` → Android Studio/Xcode
+
+## 📱 Testing en Dispositivo Real
+
+### Opción 1: Development Build (Recomendado)
+
+```bash
+# Build e instalar en tu dispositivo
+eas build --profile development --platform android
+eas build --profile development --platform ios
+
+# Después de instalar, ejecuta:
+npx expo start --dev-client
+```
+
+### Opción 2: Local Build
+
+```bash
+# Generar archivos nativos
+npx expo prebuild
+
+# Android
+cd android && ./gradlew assembleDebug
+adb install app/build/outputs/apk/debug/app-debug.apk
+
+# iOS (requiere Mac)
+cd ios && pod install
+# Abrir en Xcode y ejecutar
+```
+
+## 🌐 Deploy en Stores
+
+### Google Play Store
+
+```bash
+# Build AAB para Play Store
+eas build --platform android --profile production
+
+# Submit a Google Play
+eas submit --platform android
+```
+
+### Apple App Store
+
+```bash
+# Build para App Store (requiere cuenta Apple Developer $99/año)
+eas build --platform ios --profile production
+
+# Submit a App Store
+eas submit --platform ios
+```
+
+## 📚 Documentación de Referencia
+
+### Twilio Video SDK
+- [GitHub oficial](https://github.com/blackuy/react-native-twilio-video-webrtc)
+- [npm package](https://www.npmjs.com/package/react-native-twilio-video-webrtc)
+- [Twilio Video Docs](https://www.twilio.com/docs/video)
+
+### Expo
+- [Expo Docs](https://docs.expo.dev/)
+- [EAS Build](https://docs.expo.dev/build/introduction/)
+- [Config Plugins](https://docs.expo.dev/config-plugins/introduction/)
+
+## 🔒 Seguridad
+
+- Los tokens de Twilio se generan en el backend (no expuestos en el cliente)
+- La comunicación Socket.IO usa WebSocket seguro en producción
+- Los videos no se graban ni almacenan (solo transmisión en vivo)
+
+## 🎯 Próximos Pasos
+
+1. ✅ Probar en development build
+2. 📸 Agregar captura de pantalla durante llamada
+3. 📊 Métricas de calidad de llamada
+4. 💬 Chat de texto como complemento
+5. 📝 Historial de llamadas
+6. 🔔 Notificaciones push cuando médico está disponible
 
 ## 🆘 Soporte
 
-Para más información sobre Expo:
-- Docs: https://docs.expo.dev/
-- Forum: https://forums.expo.dev/
+- **Issues**: Abre un issue en GitHub
+- **Expo Forum**: https://forums.expo.dev/
+- **Twilio Support**: https://support.twilio.com/
+
+---
+
+## 📝 Notas de Implementación
+
+Esta app usa el SDK nativo de Twilio Video (`react-native-twilio-video-webrtc`), que proporciona:
+
+- ✅ Mejor rendimiento que WebRTC en navegador
+- ✅ Menor latencia
+- ✅ Mejor manejo de recursos
+- ✅ Soporte nativo para iOS y Android
+
+**Limitación:** Requiere build nativo (no funciona con Expo Go en desarrollo).
+
+**Solución:** Usa EAS Development Build para testing en desarrollo.

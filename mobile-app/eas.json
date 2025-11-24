@@ -29,7 +29,8 @@
       },
       "ios": {
         "buildConfiguration": "Release",
-        "image": "latest"
+        "image": "latest",
+        "cocoapods": "1.15.2"
       }
     }
   },

@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@twilio/video-processors": "^3.1.0",
@@ -23,6 +24,7 @@
   },
   "private": true,
   "devDependencies": {
-    "@expo/config-plugins": "^54.0.2"
+    "@expo/config-plugins": "^54.0.2",
+    "patch-package": "^8.0.1"
   }
 }

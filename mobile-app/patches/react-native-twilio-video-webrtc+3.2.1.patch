@@ -1,3 +1,16 @@
+diff --git a/node_modules/react-native-twilio-video-webrtc/ios/RCTTWVideoModule.m b/node_modules/react-native-twilio-video-webrtc/ios/RCTTWVideoModule.m
+index 2311f6c..edef087 100644
+--- a/node_modules/react-native-twilio-video-webrtc/ios/RCTTWVideoModule.m
++++ b/node_modules/react-native-twilio-video-webrtc/ios/RCTTWVideoModule.m
+@@ -421,7 +421,7 @@ -(NSMutableDictionary*)convertLocalVideoTrackStats:(TVILocalVideoTrackStats *)st
+   }
+ }
+ 
+-RCT_EXPORT_METHOD(connect:(NSString *)accessToken roomName:(NSString *)roomName enableAudio:(BOOL *)enableAudio enableVideo:(BOOL *)enableVideo encodingParameters:(NSDictionary *)encodingParameters enableNetworkQualityReporting:(BOOL *)enableNetworkQualityReporting dominantSpeakerEnabled:(BOOL *)dominantSpeakerEnabled cameraType:(NSString *)cameraType) {
++RCT_EXPORT_METHOD(connect:(NSString *)accessToken roomName:(NSString *)roomName enableAudio:(BOOL)enableAudio enableVideo:(BOOL)enableVideo encodingParameters:(NSDictionary *)encodingParameters enableNetworkQualityReporting:(BOOL)enableNetworkQualityReporting dominantSpeakerEnabled:(BOOL)dominantSpeakerEnabled cameraType:(NSString *)cameraType) {
+   [self _setLocalVideoEnabled:enableVideo cameraType:cameraType];
+   if (self.localAudioTrack) {
+     [self.localAudioTrack setEnabled:enableAudio];
 diff --git a/node_modules/react-native-twilio-video-webrtc/react-native-twilio-video-webrtc.podspec b/node_modules/react-native-twilio-video-webrtc/react-native-twilio-video-webrtc.podspec
 index b0d7623..6fe7144 100644
 --- a/node_modules/react-native-twilio-video-webrtc/react-native-twilio-video-webrtc.podspec

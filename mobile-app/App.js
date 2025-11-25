@@ -162,12 +162,12 @@ export default function App() {
       console.log('Token recibido, conectando a sala:', roomName);
 
       // Conectar a la sala de Twilio
-      // Nota: No pasar enableAudio/enableVideo aquí debido a bug en iOS
-      // El audio y video se habilitan por defecto
       if (twilioRef.current) {
         twilioRef.current.connect({
           roomName: roomName,
-          accessToken: data.token
+          accessToken: data.token,
+          enableAudio: true,
+          enableVideo: true
         });
       }
 

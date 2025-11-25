@@ -4,7 +4,7 @@
     "slug": "bsl-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "buildNumber": "3",
+    "buildNumber": "4",
     "owner": "dtalero",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

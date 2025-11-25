@@ -4,7 +4,6 @@
     "slug": "bsl-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "buildNumber": "4",
     "owner": "dtalero",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bsl.paciente",
+      "buildNumber": "4",
       "infoPlist": {
         "NSCameraUsageDescription": "La app necesita acceso a la cámara para las videollamadas con el médico.",
         "NSMicrophoneUsageDescription": "La app necesita acceso al micrófono para las videollamadas con el médico.",

@@ -31,6 +31,9 @@ export default function App() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [videoTracks, setVideoTracks] = useState(new Map());
+  const [queuePosition, setQueuePosition] = useState(null);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const [medicosDisponibles, setMedicosDisponibles] = useState(0);
 
   const socketRef = useRef(null);
   const twilioRef = useRef(null);
@@ -90,15 +93,34 @@ export default function App() {
         setStatusMessage('Desconectado del servidor');
       });
 
-      socket.on('medico-no-disponible', () => {
+      socket.on('medico-no-disponible', (data) => {
         setCalling(false);
-        setStatusMessage('Médico no disponible. Intenta más tarde.');
-        Alert.alert('No Disponible', 'El médico no está disponible en este momento.');
+        setQueuePosition(null);
+        const mensaje = data?.mensaje || 'No hay médicos disponibles en este momento.';
+        setStatusMessage(mensaje);
+        Alert.alert('No Disponible', mensaje);
+      });
+
+      socket.on('en-cola', (data) => {
+        console.log('En cola:', data);
+        setQueuePosition(data.posicion);
+        setQueueTotal(data.total);
+        setMedicosDisponibles(data.medicosDisponibles);
+        setStatusMessage(`En cola: posición ${data.posicion} de ${data.total}`);
+      });
+
+      socket.on('posicion-cola', (data) => {
+        console.log('Posición actualizada:', data);
+        setQueuePosition(data.posicion);
+        setQueueTotal(data.total);
+        setMedicosDisponibles(data.medicosDisponibles);
+        setStatusMessage(`En cola: posición ${data.posicion} de ${data.total}`);
       });
 
       socket.on('medico-aceptado', async (data) => {
         console.log('Médico aceptó la llamada:', data);
         roomNameRef.current = data.roomName;
+        setQueuePosition(null);
         setStatusMessage('Conectando videollamada...');
         await startVideoCall(data.roomName);
       });
@@ -187,6 +209,17 @@ export default function App() {
     setInCall(false);
     setCalling(false);
     setVideoTracks(new Map());
+    setQueuePosition(null);
+    setStatusMessage('Presiona el botón para llamar al médico');
+  };
+
+  const cancelarLlamada = () => {
+    console.log('Cancelando llamada');
+    if (socketRef.current) {
+      socketRef.current.emit('cancelar-llamada');
+    }
+    setCalling(false);
+    setQueuePosition(null);
     setStatusMessage('Presiona el botón para llamar al médico');
   };
 
@@ -315,6 +348,25 @@ export default function App() {
             </TouchableOpacity>
 
             <Text style={styles.statusMessage}>{statusMessage}</Text>
+
+            {queuePosition && (
+              <View style={styles.queueInfo}>
+                <Text style={styles.queuePosition}>
+                  Posición en cola: {queuePosition} de {queueTotal}
+                </Text>
+                <Text style={styles.queueMedicos}>
+                  {medicosDisponibles > 0
+                    ? `${medicosDisponibles} médico(s) disponible(s)`
+                    : 'Esperando médico disponible...'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={cancelarLlamada}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {!hasPermission && (
               <TouchableOpacity
@@ -544,5 +596,34 @@ const styles = StyleSheet.create({
   },
   controlButtonText: {
     fontSize: 28,
+  },
+  queueInfo: {
+    marginTop: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+  },
+  queuePosition: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
+  },
+  queueMedicos: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 15,
+  },
+  cancelButton: {
+    backgroundColor: '#dc3545',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

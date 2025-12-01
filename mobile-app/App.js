@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Dimensions
+  Dimensions,
+  Image
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -22,7 +23,22 @@ import { config } from './config';
 
 const { width, height } = Dimensions.get('window');
 
+// Paleta de colores BSL
+const colors = {
+  laPalma: '#16a330',
+  oliveDrab: '#5bae27',
+  bahamaBlue: '#00668e',
+  greenHaze: '#039874',
+  abbey: '#4c4c4d',
+  funGreen: '#007b35',
+  persianGreen: '#02969b',
+  bondiBlue: '#008fb7',
+  white: '#ffffff',
+  lightGray: '#f5f5f5',
+};
+
 export default function App() {
+  const [currentScreen, setCurrentScreen] = useState('home');
   const [status, setStatus] = useState('disconnected');
   const [statusMessage, setStatusMessage] = useState('Conectando...');
   const [hasPermission, setHasPermission] = useState(false);
@@ -84,7 +100,7 @@ export default function App() {
       socket.on('connect', () => {
         console.log('Socket conectado');
         setStatus('connected');
-        setStatusMessage('Presiona el botón para llamar al médico');
+        setStatusMessage('Conectado');
       });
 
       socket.on('disconnect', () => {
@@ -138,16 +154,35 @@ export default function App() {
     }
   };
 
-  const llamarMedico = () => {
+  const handleUrgenciaMedica = () => {
     if (!hasPermission) {
       Alert.alert('Permisos Requeridos', 'Por favor, otorga permisos de cámara y micrófono.');
+      requestPermissions();
       return;
     }
 
+    if (status !== 'connected') {
+      Alert.alert('Sin Conexión', 'No estás conectado al servidor. Verifica tu conexión a internet.');
+      return;
+    }
+
+    setCurrentScreen('urgencia');
+    llamarMedico();
+  };
+
+  const handleAgendarConsulta = () => {
+    Alert.alert('Próximamente', 'Esta función estará disponible pronto.');
+  };
+
+  const handleDescargarCertificado = () => {
+    Alert.alert('Próximamente', 'Esta función estará disponible pronto.');
+  };
+
+  const llamarMedico = () => {
     if (calling) return;
 
     setCalling(true);
-    setStatusMessage('Llamando al médico...');
+    setStatusMessage('Buscando médico disponible...');
 
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit('llamar-medico', {
@@ -164,7 +199,6 @@ export default function App() {
     try {
       console.log('Solicitando token de Twilio...');
 
-      // Obtener token de Twilio
       const response = await fetch(`${config.SERVER_URL}/token`, {
         method: 'POST',
         headers: {
@@ -183,7 +217,6 @@ export default function App() {
       const data = await response.json();
       console.log('Token recibido, conectando a sala:', roomName);
 
-      // Conectar a la sala de Twilio
       if (twilioRef.current) {
         twilioRef.current.connect({
           roomName: roomName,
@@ -210,7 +243,8 @@ export default function App() {
     setCalling(false);
     setVideoTracks(new Map());
     setQueuePosition(null);
-    setStatusMessage('Presiona el botón para llamar al médico');
+    setCurrentScreen('home');
+    setStatusMessage('Conectado');
   };
 
   const cancelarLlamada = () => {
@@ -220,7 +254,8 @@ export default function App() {
     }
     setCalling(false);
     setQueuePosition(null);
-    setStatusMessage('Presiona el botón para llamar al médico');
+    setCurrentScreen('home');
+    setStatusMessage('Conectado');
   };
 
   const toggleAudio = () => {
@@ -272,6 +307,8 @@ export default function App() {
     setInCall(false);
     setCalling(false);
     setVideoTracks(new Map());
+    setQueuePosition(null);
+    setCurrentScreen('home');
     setStatusMessage('Llamada finalizada');
   };
 
@@ -280,6 +317,7 @@ export default function App() {
     Alert.alert('Error de Conexión', 'No se pudo conectar a la videollamada: ' + error);
     setInCall(false);
     setCalling(false);
+    setCurrentScreen('home');
   };
 
   const onParticipantAddedVideoTrack = ({ participant, track }) => {
@@ -306,144 +344,147 @@ export default function App() {
     });
   };
 
-  const getStatusColor = () => {
-    switch (status) {
-      case 'connected': return '#28a745';
-      case 'disconnected': return '#dc3545';
-      case 'error': return '#ffc107';
-      default: return '#6c757d';
-    }
-  };
+  // Pantalla Home
+  const renderHome = () => (
+    <View style={styles.homeContainer}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+
+      {/* Logo centrado */}
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('./assets/bsl-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
+
+      {/* Botones en la parte inferior */}
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity
+          style={[styles.mainButton, { backgroundColor: colors.laPalma }]}
+          onPress={handleUrgenciaMedica}
+        >
+          <Text style={styles.mainButtonText}>Urgencia Médica</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mainButton, styles.outlineButton]}
+          onPress={handleAgendarConsulta}
+        >
+          <Text style={[styles.mainButtonText, styles.outlineButtonText]}>Agendar Consulta</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mainButton, styles.outlineButton]}
+          onPress={handleDescargarCertificado}
+        >
+          <Text style={[styles.mainButtonText, styles.outlineButtonText]}>Descargar Certificado</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Pantalla de Urgencia (esperando médico)
+  const renderUrgencia = () => (
+    <View style={styles.urgenciaContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.greenHaze} />
+
+      <TouchableOpacity style={styles.backButton} onPress={cancelarLlamada}>
+        <Text style={styles.backButtonText}>← Volver</Text>
+      </TouchableOpacity>
+
+      <View style={styles.urgenciaContent}>
+        <ActivityIndicator size="large" color={colors.white} />
+        <Text style={styles.urgenciaTitle}>Buscando médico</Text>
+        <Text style={styles.urgenciaSubtitle}>{statusMessage}</Text>
+
+        {queuePosition && (
+          <View style={styles.queueInfo}>
+            <Text style={styles.queuePosition}>
+              Posición {queuePosition} de {queueTotal}
+            </Text>
+            <Text style={styles.queueMedicos}>
+              {medicosDisponibles > 0
+                ? `${medicosDisponibles} médico(s) disponible(s)`
+                : 'Esperando médico disponible...'}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.cancelContainer}>
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={cancelarLlamada}
+        >
+          <Text style={styles.cancelButtonText}>Cancelar</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Pantalla de videollamada
+  const renderVideoCall = () => (
+    <View style={styles.videoContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+
+      {/* Video remoto (médico) - pantalla completa */}
+      {Array.from(videoTracks, ([trackSid, trackIdentifier]) => (
+        <TwilioVideoParticipantView
+          style={styles.remoteVideo}
+          key={trackSid}
+          trackIdentifier={trackIdentifier}
+        />
+      ))}
+
+      {/* Video local (paciente) - esquina */}
+      <TwilioVideoLocalView
+        enabled={true}
+        style={styles.localVideo}
+      />
+
+      {/* Controles */}
+      <View style={styles.controls}>
+        <TouchableOpacity
+          style={[styles.controlButton, !isAudioEnabled && styles.controlButtonOff]}
+          onPress={toggleAudio}
+        >
+          <Text style={styles.controlButtonText}>
+            {isAudioEnabled ? '🎤' : '🔇'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.controlButton, styles.endCallButton]}
+          onPress={endCall}
+        >
+          <Text style={styles.controlButtonText}>📞</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.controlButton, !isVideoEnabled && styles.controlButtonOff]}
+          onPress={toggleVideo}
+        >
+          <Text style={styles.controlButtonText}>
+            {isVideoEnabled ? '📹' : '🚫'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={flipCamera}
+        >
+          <Text style={styles.controlButtonText}>🔄</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      {!inCall && (
-        <>
-          <View style={styles.header}>
-            <Text style={styles.title}>🏥 Atención Médica</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-              <Text style={styles.statusText}>
-                {status === 'connected' ? '● Conectado' : '○ Desconectado'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.content}>
-            <TouchableOpacity
-              style={[
-                styles.callButton,
-                calling && styles.callingButton,
-                !hasPermission && styles.disabledButton
-              ]}
-              onPress={llamarMedico}
-              disabled={calling || !hasPermission || status !== 'connected'}
-            >
-              {calling ? (
-                <ActivityIndicator size="large" color="#fff" />
-              ) : (
-                <Text style={styles.callButtonIcon}>📞</Text>
-              )}
-            </TouchableOpacity>
-
-            <Text style={styles.statusMessage}>{statusMessage}</Text>
-
-            {queuePosition && (
-              <View style={styles.queueInfo}>
-                <Text style={styles.queuePosition}>
-                  Posición en cola: {queuePosition} de {queueTotal}
-                </Text>
-                <Text style={styles.queueMedicos}>
-                  {medicosDisponibles > 0
-                    ? `${medicosDisponibles} médico(s) disponible(s)`
-                    : 'Esperando médico disponible...'}
-                </Text>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={cancelarLlamada}
-                >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {!hasPermission && (
-              <TouchableOpacity
-                style={styles.permissionButton}
-                onPress={requestPermissions}
-              >
-                <Text style={styles.permissionButtonText}>
-                  Otorgar Permisos
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Presiona el botón para llamar al médico
-            </Text>
-            <Text style={styles.footerSubtext}>
-              Asegúrate de estar en un lugar tranquilo
-            </Text>
-          </View>
-        </>
-      )}
-
-      {inCall && (
-        <View style={styles.videoContainer}>
-          {/* Video remoto (médico) - pantalla completa */}
-          {Array.from(videoTracks, ([trackSid, trackIdentifier]) => (
-            <TwilioVideoParticipantView
-              style={styles.remoteVideo}
-              key={trackSid}
-              trackIdentifier={trackIdentifier}
-            />
-          ))}
-
-          {/* Video local (paciente) - esquina */}
-          <TwilioVideoLocalView
-            enabled={true}
-            style={styles.localVideo}
-          />
-
-          {/* Controles */}
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={[styles.controlButton, !isAudioEnabled && styles.controlButtonOff]}
-              onPress={toggleAudio}
-            >
-              <Text style={styles.controlButtonText}>
-                {isAudioEnabled ? '🎤' : '🔇'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlButton, styles.endCallButton]}
-              onPress={endCall}
-            >
-              <Text style={styles.controlButtonText}>📞</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlButton, !isVideoEnabled && styles.controlButtonOff]}
-              onPress={toggleVideo}
-            >
-              <Text style={styles.controlButtonText}>
-                {isVideoEnabled ? '📹' : '🚫'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={flipCamera}
-            >
-              <Text style={styles.controlButtonText}>🔄</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      {currentScreen === 'home' && !inCall && renderHome()}
+      {currentScreen === 'urgencia' && !inCall && renderUrgencia()}
+      {inCall && renderVideoCall()}
 
       {/* Componente TwilioVideo - invisible pero necesario */}
       <TwilioVideo
@@ -461,94 +502,119 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#667eea',
+    backgroundColor: colors.white,
   },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 10,
-  },
-  statusBadge: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  content: {
+
+  // Home Screen
+  homeContainer: {
     flex: 1,
-    alignItems: 'center',
+    backgroundColor: colors.white,
+  },
+  logoContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  logo: {
+    width: width * 0.7,
+    height: width * 0.5,
+  },
+  buttonsContainer: {
     paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+    gap: 12,
   },
-  callButton: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#28a745',
+  mainButton: {
+    paddingVertical: 18,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
   },
-  callingButton: {
-    backgroundColor: '#ffc107',
+  mainButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.white,
   },
-  disabledButton: {
-    backgroundColor: '#6c757d',
-    opacity: 0.5,
+  outlineButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: colors.abbey,
   },
-  callButtonIcon: {
-    fontSize: 80,
+  outlineButtonText: {
+    color: colors.abbey,
   },
-  statusMessage: {
-    fontSize: 20,
-    color: '#fff',
-    marginTop: 30,
-    textAlign: 'center',
+
+  // Urgencia Screen
+  urgenciaContainer: {
+    flex: 1,
+    backgroundColor: colors.greenHaze,
+  },
+  backButton: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  backButtonText: {
+    color: colors.white,
+    fontSize: 16,
     fontWeight: '500',
   },
-  permissionButton: {
-    marginTop: 20,
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-    borderRadius: 25,
+  urgenciaContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
   },
-  permissionButtonText: {
-    color: '#667eea',
+  urgenciaTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginTop: 30,
+    marginBottom: 10,
+  },
+  urgenciaSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+  },
+  queueInfo: {
+    marginTop: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+    width: '100%',
+  },
+  queuePosition: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginBottom: 5,
+  },
+  queueMedicos: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  cancelContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 16,
+    borderRadius: 30,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  cancelButtonText: {
+    color: colors.white,
     fontSize: 16,
     fontWeight: '600',
   },
-  footer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  footerText: {
-    color: '#fff',
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  footerSubtext: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-  },
+
+  // Video Call Screen
   videoContainer: {
     flex: 1,
     backgroundColor: '#000',
@@ -566,7 +632,7 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: colors.white,
   },
   controls: {
     position: 'absolute',
@@ -596,34 +662,5 @@ const styles = StyleSheet.create({
   },
   controlButtonText: {
     fontSize: 28,
-  },
-  queueInfo: {
-    marginTop: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 20,
-    borderRadius: 15,
-    alignItems: 'center',
-  },
-  queuePosition: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
-  },
-  queueMedicos: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 15,
-  },
-  cancelButton: {
-    backgroundColor: '#dc3545',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  cancelButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

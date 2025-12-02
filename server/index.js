@@ -4,7 +4,8 @@ const http = require('http');
 const socketIO = require('socket.io');
 const twilio = require('twilio');
 const cors = require('cors');
-const path = require('path');
+const { Pool } = require('pg');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
@@ -29,6 +30,16 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.static('public'));
+
+// PostgreSQL config
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 25060,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME || 'defaultdb',
+  ssl: { rejectUnauthorized: false }
+});
 
 // Twilio config
 const accountSid = process.env.TWILIO_ACCOUNT_SID || 'YOUR_ACCOUNT_SID';
@@ -408,6 +419,85 @@ app.post('/token', (req, res) => {
   } catch (error) {
     console.error('Error generando token:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Agendar consulta
+app.post('/agendar-consulta', async (req, res) => {
+  try {
+    const {
+      primerNombre,
+      segundoNombre,
+      primerApellido,
+      segundoApellido,
+      numeroId,
+      celular,
+      tipoConsulta,
+      mes,
+      dia,
+      hora
+    } = req.body;
+
+    // Validar campos requeridos
+    if (!primerNombre || !primerApellido || !numeroId || !celular || !tipoConsulta || !mes || !dia || !hora) {
+      return res.status(400).json({ error: 'Todos los campos obligatorios son requeridos' });
+    }
+
+    // Sanitizar datos
+    const sanitizedData = {
+      primerNombre: sanitizeString(primerNombre),
+      segundoNombre: sanitizeString(segundoNombre) || null,
+      primerApellido: sanitizeString(primerApellido),
+      segundoApellido: sanitizeString(segundoApellido) || null,
+      numeroId: sanitizeString(numeroId),
+      celular: sanitizeString(celular, 20),
+      tipoExamen: sanitizeString(tipoConsulta, 255)
+    };
+
+    // Construir fecha de consulta
+    const year = new Date().getFullYear();
+    const fechaConsulta = new Date(`${year}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}T${hora}:00`);
+
+    // Generar ID único
+    const id = uuidv4();
+
+    // Insertar en base de datos
+    const query = `
+      INSERT INTO "HistoriaClinica" (
+        "_id", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
+        "numeroId", "celular", "tipoExamen", "fechaConsulta", "atendido", "pvEstado"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING "_id"
+    `;
+
+    const values = [
+      id,
+      sanitizedData.primerNombre,
+      sanitizedData.segundoNombre,
+      sanitizedData.primerApellido,
+      sanitizedData.segundoApellido,
+      sanitizedData.numeroId,
+      sanitizedData.celular,
+      sanitizedData.tipoExamen,
+      fechaConsulta,
+      'pendiente',
+      'agendado'
+    ];
+
+    const result = await pool.query(query, values);
+
+    console.log('Consulta agendada:', result.rows[0]._id);
+
+    res.json({
+      success: true,
+      message: 'Consulta agendada exitosamente',
+      id: result.rows[0]._id,
+      fechaConsulta: fechaConsulta.toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error agendando consulta:', error);
+    res.status(500).json({ error: 'Error al agendar la consulta' });
   }
 });
 

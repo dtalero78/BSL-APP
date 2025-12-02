@@ -9,7 +9,10 @@ import {
   Alert,
   Platform,
   Dimensions,
-  ImageBackground
+  ImageBackground,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -50,6 +53,21 @@ export default function App() {
   const [queuePosition, setQueuePosition] = useState(null);
   const [queueTotal, setQueueTotal] = useState(0);
   const [medicosDisponibles, setMedicosDisponibles] = useState(0);
+
+  // Estado del formulario de agendar consulta
+  const [formData, setFormData] = useState({
+    primerNombre: '',
+    segundoNombre: '',
+    primerApellido: '',
+    segundoApellido: '',
+    numeroId: '',
+    celular: '',
+    tipoConsulta: 'Ocupacional',
+    mes: '',
+    dia: '',
+    hora: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const socketRef = useRef(null);
   const twilioRef = useRef(null);
@@ -171,7 +189,61 @@ export default function App() {
   };
 
   const handleAgendarConsulta = () => {
-    Alert.alert('Próximamente', 'Esta función estará disponible pronto.');
+    setCurrentScreen('agendar');
+  };
+
+  const updateFormField = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const submitAgendarConsulta = async () => {
+    // Validar campos requeridos
+    if (!formData.primerNombre || !formData.primerApellido || !formData.numeroId ||
+        !formData.celular || !formData.mes || !formData.dia || !formData.hora) {
+      Alert.alert('Campos Requeridos', 'Por favor complete todos los campos obligatorios.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`${config.SERVER_URL}/agendar-consulta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        Alert.alert(
+          'Consulta Agendada',
+          `Su consulta ha sido agendada exitosamente para el ${formData.dia}/${formData.mes} a las ${formData.hora}.`,
+          [{ text: 'OK', onPress: () => {
+            setCurrentScreen('home');
+            setFormData({
+              primerNombre: '',
+              segundoNombre: '',
+              primerApellido: '',
+              segundoApellido: '',
+              numeroId: '',
+              celular: '',
+              tipoConsulta: 'Ocupacional',
+              mes: '',
+              dia: '',
+              hora: ''
+            });
+          }}]
+        );
+      } else {
+        Alert.alert('Error', data.error || 'No se pudo agendar la consulta.');
+      }
+    } catch (error) {
+      console.error('Error agendando consulta:', error);
+      Alert.alert('Error', 'Error de conexión. Por favor intente nuevamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDescargarCertificado = () => {
@@ -427,6 +499,177 @@ export default function App() {
     </View>
   );
 
+  // Pantalla de Agendar Consulta
+  const renderAgendarConsulta = () => (
+    <KeyboardAvoidingView
+      style={styles.formContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+
+      <View style={styles.formHeader}>
+        <TouchableOpacity onPress={() => setCurrentScreen('home')}>
+          <Text style={styles.formBackText}>← Volver</Text>
+        </TouchableOpacity>
+        <Text style={styles.formTitle}>Agendar Consulta</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.formContent}>
+          <Text style={styles.formSectionTitle}>Datos Personales</Text>
+
+          <View style={styles.inputRow}>
+            <View style={styles.inputHalf}>
+              <Text style={styles.inputLabel}>Primer Nombre *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.primerNombre}
+                onChangeText={(v) => updateFormField('primerNombre', v)}
+                placeholder="Ej: Juan"
+                placeholderTextColor="#999"
+              />
+            </View>
+            <View style={styles.inputHalf}>
+              <Text style={styles.inputLabel}>Segundo Nombre</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.segundoNombre}
+                onChangeText={(v) => updateFormField('segundoNombre', v)}
+                placeholder="Ej: Carlos"
+                placeholderTextColor="#999"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={styles.inputHalf}>
+              <Text style={styles.inputLabel}>Primer Apellido *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.primerApellido}
+                onChangeText={(v) => updateFormField('primerApellido', v)}
+                placeholder="Ej: Pérez"
+                placeholderTextColor="#999"
+              />
+            </View>
+            <View style={styles.inputHalf}>
+              <Text style={styles.inputLabel}>Segundo Apellido</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.segundoApellido}
+                onChangeText={(v) => updateFormField('segundoApellido', v)}
+                placeholder="Ej: García"
+                placeholderTextColor="#999"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.inputLabel}>Número de Identificación *</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.numeroId}
+            onChangeText={(v) => updateFormField('numeroId', v)}
+            placeholder="Ej: 1234567890"
+            placeholderTextColor="#999"
+            keyboardType="numeric"
+          />
+
+          <Text style={styles.inputLabel}>Celular *</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.celular}
+            onChangeText={(v) => updateFormField('celular', v)}
+            placeholder="Ej: 3001234567"
+            placeholderTextColor="#999"
+            keyboardType="phone-pad"
+          />
+
+          <Text style={styles.formSectionTitle}>Tipo de Consulta</Text>
+
+          <View style={styles.tipoConsultaRow}>
+            <TouchableOpacity
+              style={[
+                styles.tipoConsultaBtn,
+                formData.tipoConsulta === 'Ocupacional' && styles.tipoConsultaBtnActive
+              ]}
+              onPress={() => updateFormField('tipoConsulta', 'Ocupacional')}
+            >
+              <Text style={[
+                styles.tipoConsultaText,
+                formData.tipoConsulta === 'Ocupacional' && styles.tipoConsultaTextActive
+              ]}>Ocupacional</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tipoConsultaBtn,
+                formData.tipoConsulta === 'Medicina General' && styles.tipoConsultaBtnActive
+              ]}
+              onPress={() => updateFormField('tipoConsulta', 'Medicina General')}
+            >
+              <Text style={[
+                styles.tipoConsultaText,
+                formData.tipoConsulta === 'Medicina General' && styles.tipoConsultaTextActive
+              ]}>Medicina General</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.formSectionTitle}>Fecha y Hora</Text>
+
+          <View style={styles.inputRow}>
+            <View style={styles.inputThird}>
+              <Text style={styles.inputLabel}>Mes *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.mes}
+                onChangeText={(v) => updateFormField('mes', v)}
+                placeholder="MM"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+                maxLength={2}
+              />
+            </View>
+            <View style={styles.inputThird}>
+              <Text style={styles.inputLabel}>Día *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.dia}
+                onChangeText={(v) => updateFormField('dia', v)}
+                placeholder="DD"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+                maxLength={2}
+              />
+            </View>
+            <View style={styles.inputThird}>
+              <Text style={styles.inputLabel}>Hora *</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.hora}
+                onChangeText={(v) => updateFormField('hora', v)}
+                placeholder="HH:MM"
+                placeholderTextColor="#999"
+                maxLength={5}
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+            onPress={submitAgendarConsulta}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.submitButtonText}>Agendar Consulta</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
   // Pantalla de videollamada estilo Zoom
   const renderVideoCall = () => (
     <View style={styles.videoContainer}>
@@ -478,40 +721,39 @@ export default function App() {
           style={styles.controlItem}
           onPress={toggleAudio}
         >
-          <View style={[styles.controlIconContainer, !isAudioEnabled && styles.controlIconOff]}>
-            <Text style={styles.controlIcon}>{isAudioEnabled ? '🎤' : '🔇'}</Text>
-          </View>
-          <Text style={styles.controlLabel}>{isAudioEnabled ? 'Silenciar' : 'Activar'}</Text>
+          <Text style={[styles.controlIcon, !isAudioEnabled && styles.controlIconOff]}>
+            {isAudioEnabled ? '🎙️' : '🔇'}
+          </Text>
+          <Text style={[styles.controlLabel, !isAudioEnabled && styles.controlLabelOff]}>
+            {isAudioEnabled ? 'Mute' : 'Unmute'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.controlItem}
           onPress={toggleVideo}
         >
-          <View style={[styles.controlIconContainer, !isVideoEnabled && styles.controlIconOff]}>
-            <Text style={styles.controlIcon}>{isVideoEnabled ? '📹' : '🚫'}</Text>
-          </View>
-          <Text style={styles.controlLabel}>{isVideoEnabled ? 'Detener' : 'Iniciar'}</Text>
+          <Text style={[styles.controlIcon, !isVideoEnabled && styles.controlIconOff]}>
+            {isVideoEnabled ? '📹' : '📷'}
+          </Text>
+          <Text style={[styles.controlLabel, !isVideoEnabled && styles.controlLabelOff]}>
+            {isVideoEnabled ? 'Stop Video' : 'Start Video'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.controlItem}
           onPress={flipCamera}
         >
-          <View style={styles.controlIconContainer}>
-            <Text style={styles.controlIcon}>🔄</Text>
-          </View>
-          <Text style={styles.controlLabel}>Voltear</Text>
+          <Text style={styles.controlIcon}>🔄</Text>
+          <Text style={styles.controlLabel}>Flip</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.controlItem}
+          style={styles.endCallButton}
           onPress={endCall}
         >
-          <View style={[styles.controlIconContainer, styles.endCallIcon]}>
-            <Text style={styles.controlIcon}>📞</Text>
-          </View>
-          <Text style={[styles.controlLabel, styles.endCallLabel]}>Finalizar</Text>
+          <Text style={styles.endCallText}>End</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -521,6 +763,7 @@ export default function App() {
     <View style={styles.container}>
       {currentScreen === 'home' && !inCall && renderHome()}
       {currentScreen === 'urgencia' && !inCall && renderUrgencia()}
+      {currentScreen === 'agendar' && !inCall && renderAgendarConsulta()}
       {inCall && renderVideoCall()}
 
       {/* Componente TwilioVideo - invisible pero necesario */}
@@ -748,39 +991,149 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingBottom: Platform.OS === 'ios' ? 35 : 20,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 15,
+    backgroundColor: '#232323',
+    borderTopWidth: 1,
+    borderTopColor: '#333',
   },
   controlItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 70,
-  },
-  controlIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  controlIconOff: {
-    backgroundColor: 'rgba(255,59,48,0.8)',
+    paddingHorizontal: 12,
   },
   controlIcon: {
-    fontSize: 22,
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  controlIconOff: {
+    opacity: 0.5,
   },
   controlLabel: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 11,
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '400',
+  },
+  controlLabelOff: {
+    color: '#ff4444',
+  },
+  endCallButton: {
+    backgroundColor: '#e53935',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  endCallText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Formulario Agendar Consulta
+  formContainer: {
+    flex: 1,
+    backgroundColor: colors.white,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: colors.white,
+  },
+  formBackText: {
+    color: colors.laPalma,
+    fontSize: 16,
     fontWeight: '500',
   },
-  endCallIcon: {
-    backgroundColor: '#e53935',
+  formTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.abbey,
   },
-  endCallLabel: {
-    color: '#e53935',
+  formScroll: {
+    flex: 1,
+  },
+  formContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  formSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.abbey,
+    marginTop: 20,
+    marginBottom: 15,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 5,
+  },
+  inputHalf: {
+    flex: 1,
+  },
+  inputThird: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.abbey,
+    backgroundColor: '#fafafa',
+  },
+  tipoConsultaRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  tipoConsultaBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    backgroundColor: '#fafafa',
+  },
+  tipoConsultaBtnActive: {
+    backgroundColor: colors.laPalma,
+    borderColor: colors.laPalma,
+  },
+  tipoConsultaText: {
+    fontSize: 14,
+    color: colors.abbey,
+    fontWeight: '500',
+  },
+  tipoConsultaTextActive: {
+    color: colors.white,
+  },
+  submitButton: {
+    backgroundColor: colors.laPalma,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 30,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

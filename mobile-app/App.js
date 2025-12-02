@@ -222,7 +222,13 @@ export default function App() {
           roomName: roomName,
           accessToken: data.token,
           enableAudio: true,
-          enableVideo: true
+          enableVideo: true,
+          encodingParameters: {
+            enableH264Codec: true,
+            audioBitrate: 16,
+            videoBitrate: 400
+          },
+          enableNetworkQualityReporting: true
         });
       }
 
@@ -527,7 +533,7 @@ const styles = StyleSheet.create({
   },
   mainButton: {
     paddingVertical: 18,
-    borderRadius: 30,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -603,7 +609,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingVertical: 16,
-    borderRadius: 30,
+    borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',

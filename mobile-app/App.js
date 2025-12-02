@@ -12,7 +12,8 @@ import {
   ImageBackground,
   TextInput,
   ScrollView,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Linking
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -68,6 +69,10 @@ export default function App() {
     hora: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estado para descargar certificado
+  const [certificadoNumeroId, setCertificadoNumeroId] = useState('');
+  const [isSearchingCertificado, setIsSearchingCertificado] = useState(false);
 
   const socketRef = useRef(null);
   const twilioRef = useRef(null);
@@ -247,7 +252,42 @@ export default function App() {
   };
 
   const handleDescargarCertificado = () => {
-    Alert.alert('Próximamente', 'Esta función estará disponible pronto.');
+    setCurrentScreen('certificado');
+  };
+
+  const buscarCertificado = async () => {
+    if (!certificadoNumeroId.trim()) {
+      Alert.alert('Campo Requerido', 'Por favor ingrese su número de documento.');
+      return;
+    }
+
+    setIsSearchingCertificado(true);
+
+    try {
+      const response = await fetch(`${config.SERVER_URL}/buscar-certificado/${certificadoNumeroId.trim()}`);
+      const data = await response.json();
+
+      if (data.success && data.found) {
+        Alert.alert(
+          'Certificado Encontrado',
+          `Se encontró el certificado para ${data.nombre}.\n\n¿Desea descargarlo?`,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Descargar',
+              onPress: () => Linking.openURL(data.certificadoUrl)
+            }
+          ]
+        );
+      } else {
+        Alert.alert('No Encontrado', data.error || 'No se encontró un certificado con ese número de documento.');
+      }
+    } catch (error) {
+      console.error('Error buscando certificado:', error);
+      Alert.alert('Error', 'Error de conexión. Por favor intente nuevamente.');
+    } finally {
+      setIsSearchingCertificado(false);
+    }
   };
 
   const llamarMedico = () => {
@@ -670,6 +710,56 @@ export default function App() {
     </KeyboardAvoidingView>
   );
 
+  // Pantalla de Descargar Certificado
+  const renderCertificado = () => (
+    <KeyboardAvoidingView
+      style={styles.formContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+
+      <View style={styles.formHeader}>
+        <TouchableOpacity onPress={() => {
+          setCurrentScreen('home');
+          setCertificadoNumeroId('');
+        }}>
+          <Text style={styles.formBackText}>← Volver</Text>
+        </TouchableOpacity>
+        <Text style={styles.formTitle}>Descargar Certificado</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      <View style={styles.certificadoContent}>
+        <Text style={styles.certificadoDescription}>
+          Ingrese su número de documento para buscar y descargar su certificado médico.
+        </Text>
+
+        <Text style={styles.inputLabel}>Número de Documento *</Text>
+        <TextInput
+          style={styles.input}
+          value={certificadoNumeroId}
+          onChangeText={setCertificadoNumeroId}
+          placeholder="Ej: 1234567890"
+          placeholderTextColor="#999"
+          keyboardType="numeric"
+          autoFocus
+        />
+
+        <TouchableOpacity
+          style={[styles.submitButton, isSearchingCertificado && styles.submitButtonDisabled]}
+          onPress={buscarCertificado}
+          disabled={isSearchingCertificado}
+        >
+          {isSearchingCertificado ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitButtonText}>Buscar Certificado</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+
   // Pantalla de videollamada estilo Zoom
   const renderVideoCall = () => (
     <View style={styles.videoContainer}>
@@ -764,6 +854,7 @@ export default function App() {
       {currentScreen === 'home' && !inCall && renderHome()}
       {currentScreen === 'urgencia' && !inCall && renderUrgencia()}
       {currentScreen === 'agendar' && !inCall && renderAgendarConsulta()}
+      {currentScreen === 'certificado' && !inCall && renderCertificado()}
       {inCall && renderVideoCall()}
 
       {/* Componente TwilioVideo - invisible pero necesario */}
@@ -1135,5 +1226,19 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Pantalla Certificado
+  certificadoContent: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+  },
+  certificadoDescription: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 24,
   },
 });

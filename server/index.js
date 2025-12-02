@@ -501,6 +501,51 @@ app.post('/agendar-consulta', async (req, res) => {
   }
 });
 
+// Buscar certificado por número de documento
+app.get('/buscar-certificado/:numeroId', async (req, res) => {
+  try {
+    const { numeroId } = req.params;
+
+    if (!numeroId) {
+      return res.status(400).json({ error: 'Número de documento requerido' });
+    }
+
+    const sanitizedNumeroId = sanitizeString(numeroId, 50);
+
+    const query = `
+      SELECT "_id", "primerNombre", "primerApellido", "numeroId"
+      FROM "HistoriaClinica"
+      WHERE "numeroId" = $1
+      ORDER BY "_createdDate" DESC
+      LIMIT 1
+    `;
+
+    const result = await pool.query(query, [sanitizedNumeroId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'No se encontró registro con ese número de documento',
+        found: false
+      });
+    }
+
+    const record = result.rows[0];
+
+    res.json({
+      success: true,
+      found: true,
+      id: record._id,
+      nombre: `${record.primerNombre} ${record.primerApellido}`,
+      numeroId: record.numeroId,
+      certificadoUrl: `https://bsl-utilidades-yp78a.ondigitalocean.app/generar-certificado-desde-wix/${record._id}`
+    });
+
+  } catch (error) {
+    console.error('Error buscando certificado:', error);
+    res.status(500).json({ error: 'Error al buscar el certificado' });
+  }
+});
+
 // Health check con estadísticas
 app.get('/health', (req, res) => {
   res.json({

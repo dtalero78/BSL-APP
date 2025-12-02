@@ -429,58 +429,91 @@ export default function App() {
     </View>
   );
 
-  // Pantalla de videollamada
+  // Pantalla de videollamada estilo Zoom
   const renderVideoCall = () => (
     <View style={styles.videoContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
 
+      {/* Header */}
+      <View style={styles.videoHeader}>
+        <TouchableOpacity style={styles.headerBackButton} onPress={endCall}>
+          <Text style={styles.headerBackText}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <View style={styles.encryptedBadge}>
+            <Text style={styles.encryptedIcon}>🔒</Text>
+            <Text style={styles.encryptedText}>BSL</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.headerEndButton} onPress={endCall}>
+          <Text style={styles.headerEndText}>Salir</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Video remoto (médico) - pantalla completa */}
-      {Array.from(videoTracks, ([trackSid, trackIdentifier]) => (
-        <TwilioVideoParticipantView
-          style={styles.remoteVideo}
-          key={trackSid}
-          trackIdentifier={trackIdentifier}
+      <View style={styles.remoteVideoContainer}>
+        {Array.from(videoTracks, ([trackSid, trackIdentifier]) => (
+          <TwilioVideoParticipantView
+            style={styles.remoteVideo}
+            key={trackSid}
+            trackIdentifier={trackIdentifier}
+          />
+        ))}
+        {videoTracks.size === 0 && (
+          <View style={styles.waitingDoctor}>
+            <Text style={styles.waitingDoctorText}>Esperando al médico...</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Video local (paciente) - esquina superior derecha */}
+      <View style={styles.localVideoWrapper}>
+        <TwilioVideoLocalView
+          enabled={true}
+          style={styles.localVideo}
         />
-      ))}
+      </View>
 
-      {/* Video local (paciente) - esquina */}
-      <TwilioVideoLocalView
-        enabled={true}
-        style={styles.localVideo}
-      />
-
-      {/* Controles */}
-      <View style={styles.controls}>
+      {/* Barra de controles inferior estilo Zoom */}
+      <View style={styles.controlsBar}>
         <TouchableOpacity
-          style={[styles.controlButton, !isAudioEnabled && styles.controlButtonOff]}
+          style={styles.controlItem}
           onPress={toggleAudio}
         >
-          <Text style={styles.controlButtonText}>
-            {isAudioEnabled ? '🎤' : '🔇'}
-          </Text>
+          <View style={[styles.controlIconContainer, !isAudioEnabled && styles.controlIconOff]}>
+            <Text style={styles.controlIcon}>{isAudioEnabled ? '🎤' : '🔇'}</Text>
+          </View>
+          <Text style={styles.controlLabel}>{isAudioEnabled ? 'Silenciar' : 'Activar'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.controlButton, styles.endCallButton]}
-          onPress={endCall}
-        >
-          <Text style={styles.controlButtonText}>📞</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, !isVideoEnabled && styles.controlButtonOff]}
+          style={styles.controlItem}
           onPress={toggleVideo}
         >
-          <Text style={styles.controlButtonText}>
-            {isVideoEnabled ? '📹' : '🚫'}
-          </Text>
+          <View style={[styles.controlIconContainer, !isVideoEnabled && styles.controlIconOff]}>
+            <Text style={styles.controlIcon}>{isVideoEnabled ? '📹' : '🚫'}</Text>
+          </View>
+          <Text style={styles.controlLabel}>{isVideoEnabled ? 'Detener' : 'Iniciar'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.controlButton}
+          style={styles.controlItem}
           onPress={flipCamera}
         >
-          <Text style={styles.controlButtonText}>🔄</Text>
+          <View style={styles.controlIconContainer}>
+            <Text style={styles.controlIcon}>🔄</Text>
+          </View>
+          <Text style={styles.controlLabel}>Voltear</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlItem}
+          onPress={endCall}
+        >
+          <View style={[styles.controlIconContainer, styles.endCallIcon]}>
+            <Text style={styles.controlIcon}>📞</Text>
+          </View>
+          <Text style={[styles.controlLabel, styles.endCallLabel]}>Finalizar</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -544,8 +577,8 @@ const styles = StyleSheet.create({
   },
   outlineButton: {
     backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: colors.abbey,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 76, 77, 0.4)',
   },
   outlineButtonText: {
     color: colors.abbey,
@@ -620,53 +653,144 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Video Call Screen
+  // Video Call Screen - Zoom Style
   videoContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#1c1c1c',
+  },
+  videoHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingHorizontal: 15,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 10,
+  },
+  headerBackButton: {
+    padding: 8,
+  },
+  headerBackText: {
+    color: colors.white,
+    fontSize: 24,
+    fontWeight: '300',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  encryptedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  encryptedIcon: {
+    fontSize: 12,
+    marginRight: 5,
+  },
+  encryptedText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  headerEndButton: {
+    backgroundColor: '#e53935',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  headerEndText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  remoteVideoContainer: {
+    flex: 1,
+    backgroundColor: '#2d2d2d',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   remoteVideo: {
     flex: 1,
     width: width,
     height: height,
   },
-  localVideo: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 30,
-    right: 20,
-    width: 120,
-    height: 160,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.white,
+  waitingDoctor: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  controls: {
+  waitingDoctorText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  localVideoWrapper: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 40 : 30,
+    top: Platform.OS === 'ios' ? 110 : 90,
+    right: 15,
+    width: 100,
+    height: 140,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: '#333',
+  },
+  localVideo: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  controlsBar: {
+    position: 'absolute',
+    bottom: 0,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 20,
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingBottom: Platform.OS === 'ios' ? 35 : 20,
+    backgroundColor: 'rgba(0,0,0,0.85)',
   },
-  controlButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+  controlItem: {
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 70,
   },
-  controlButtonOff: {
-    backgroundColor: 'rgba(220,53,69,0.8)',
+  controlIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
   },
-  endCallButton: {
-    backgroundColor: '#dc3545',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  controlIconOff: {
+    backgroundColor: 'rgba(255,59,48,0.8)',
   },
-  controlButtonText: {
-    fontSize: 28,
+  controlIcon: {
+    fontSize: 22,
+  },
+  controlLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  endCallIcon: {
+    backgroundColor: '#e53935',
+  },
+  endCallLabel: {
+    color: '#e53935',
   },
 });

@@ -16,7 +16,11 @@ const io = socketIO(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  // Optimizaciones para muchas conexiones
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e6
 });
 
 app.use(cors({
@@ -35,49 +39,195 @@ const apiKeySecret = process.env.TWILIO_API_KEY_SECRET || 'YOUR_API_KEY_SECRET';
 const AccessToken = twilio.jwt.AccessToken;
 const VideoGrant = AccessToken.VideoGrant;
 
-// Estado del sistema
-let medicos = new Map(); // socketId -> { nombre, disponible, enLlamada }
-let colaPacientes = []; // [{ socketId, nombre, timestamp }]
+// ============================================
+// ESTRUCTURAS DE DATOS OPTIMIZADAS
+// ============================================
 
-// Función para notificar a todos los médicos sobre la cola
-function notificarColaAMedicos() {
-  const colaInfo = colaPacientes.map((p, index) => ({
-    posicion: index + 1,
-    pacienteId: p.socketId,
-    nombre: p.nombre,
-    esperando: Math.floor((Date.now() - p.timestamp) / 1000)
-  }));
+// Map para médicos: socketId -> { nombre, disponible, enLlamada }
+const medicos = new Map();
 
-  medicos.forEach((medico, socketId) => {
-    io.to(socketId).emit('actualizar-cola', colaInfo);
-  });
+// Map para pacientes en cola: socketId -> { nombre, timestamp, posicion }
+const pacientesEnCola = new Map();
+
+// Array ordenado para mantener el orden de la cola (solo socketIds)
+let colaOrden = [];
+
+// Rate limiting: socketId -> { count, lastReset }
+const rateLimits = new Map();
+
+// ============================================
+// CONFIGURACIÓN
+// ============================================
+const CONFIG = {
+  RATE_LIMIT_MAX: 30,        // máximo de eventos por ventana
+  RATE_LIMIT_WINDOW: 10000,  // ventana de 10 segundos
+  THROTTLE_DELAY: 100,       // delay mínimo entre notificaciones masivas
+  MAX_COLA_SIZE: 500,        // máximo pacientes en cola
+  MAX_NOMBRE_LENGTH: 50      // máximo caracteres en nombre
+};
+
+// ============================================
+// UTILIDADES
+// ============================================
+
+// Validar y sanitizar string
+function sanitizeString(str, maxLength = CONFIG.MAX_NOMBRE_LENGTH) {
+  if (typeof str !== 'string') return '';
+  return str.trim().slice(0, maxLength).replace(/[<>]/g, '');
 }
 
-// Función para notificar a pacientes su posición
-function notificarPosicionAPacientes() {
-  colaPacientes.forEach((paciente, index) => {
-    io.to(paciente.socketId).emit('posicion-cola', {
+// Rate limiting por socket
+function checkRateLimit(socketId) {
+  const now = Date.now();
+  let limit = rateLimits.get(socketId);
+
+  if (!limit || now - limit.lastReset > CONFIG.RATE_LIMIT_WINDOW) {
+    limit = { count: 0, lastReset: now };
+  }
+
+  limit.count++;
+  rateLimits.set(socketId, limit);
+
+  return limit.count <= CONFIG.RATE_LIMIT_MAX;
+}
+
+// Limpiar rate limits antiguos (cada minuto)
+setInterval(() => {
+  const now = Date.now();
+  for (const [socketId, limit] of rateLimits) {
+    if (now - limit.lastReset > CONFIG.RATE_LIMIT_WINDOW * 2) {
+      rateLimits.delete(socketId);
+    }
+  }
+}, 60000);
+
+// ============================================
+// NOTIFICACIONES OPTIMIZADAS CON THROTTLING
+// ============================================
+
+let notificacionPendiente = false;
+let ultimaNotificacion = 0;
+
+function programarNotificacion() {
+  if (notificacionPendiente) return;
+
+  const ahora = Date.now();
+  const tiempoDesdeUltima = ahora - ultimaNotificacion;
+  const delay = Math.max(0, CONFIG.THROTTLE_DELAY - tiempoDesdeUltima);
+
+  notificacionPendiente = true;
+
+  setTimeout(() => {
+    notificacionPendiente = false;
+    ultimaNotificacion = Date.now();
+    ejecutarNotificaciones();
+  }, delay);
+}
+
+function ejecutarNotificaciones() {
+  // Construir info de cola una sola vez
+  const ahora = Date.now();
+  const medicosDisponibles = Array.from(medicos.values()).filter(m => m.disponible).length;
+
+  const colaInfo = colaOrden.map((socketId, index) => {
+    const paciente = pacientesEnCola.get(socketId);
+    if (!paciente) return null;
+    return {
       posicion: index + 1,
-      total: colaPacientes.length,
-      medicosDisponibles: Array.from(medicos.values()).filter(m => m.disponible).length
+      pacienteId: socketId,
+      nombre: paciente.nombre,
+      esperando: Math.floor((ahora - paciente.timestamp) / 1000)
+    };
+  }).filter(Boolean);
+
+  // Notificar a médicos usando room
+  io.to('medicos').emit('actualizar-cola', colaInfo);
+
+  // Notificar a cada paciente su posición
+  colaOrden.forEach((socketId, index) => {
+    io.to(socketId).emit('posicion-cola', {
+      posicion: index + 1,
+      total: colaOrden.length,
+      medicosDisponibles
     });
   });
 }
 
-// Socket.IO connection
+// ============================================
+// GESTIÓN DE COLA OPTIMIZADA
+// ============================================
+
+function agregarPacienteACola(socketId, nombre) {
+  if (pacientesEnCola.has(socketId)) {
+    return pacientesEnCola.get(socketId);
+  }
+
+  if (colaOrden.length >= CONFIG.MAX_COLA_SIZE) {
+    return null; // Cola llena
+  }
+
+  const paciente = {
+    nombre: sanitizeString(nombre) || 'Paciente',
+    timestamp: Date.now(),
+    posicion: colaOrden.length + 1
+  };
+
+  pacientesEnCola.set(socketId, paciente);
+  colaOrden.push(socketId);
+
+  return paciente;
+}
+
+function removerPacienteDeCola(socketId) {
+  if (!pacientesEnCola.has(socketId)) return false;
+
+  pacientesEnCola.delete(socketId);
+  const index = colaOrden.indexOf(socketId);
+  if (index > -1) {
+    colaOrden.splice(index, 1);
+  }
+
+  return true;
+}
+
+function obtenerPosicionEnCola(socketId) {
+  const index = colaOrden.indexOf(socketId);
+  return index > -1 ? index + 1 : -1;
+}
+
+// ============================================
+// SOCKET.IO CONNECTION
+// ============================================
+
 io.on('connection', (socket) => {
   console.log('Cliente conectado:', socket.id);
 
+  // Médico se registra
   socket.on('soy-medico', (data) => {
-    const nombre = data?.nombre || 'Médico';
+    if (!checkRateLimit(socket.id)) {
+      socket.emit('error', { mensaje: 'Demasiadas solicitudes' });
+      return;
+    }
+
+    const nombre = sanitizeString(data?.nombre) || 'Médico';
     medicos.set(socket.id, { nombre, disponible: true, enLlamada: false });
+
+    // Unir al room de médicos para notificaciones eficientes
+    socket.join('medicos');
+
     console.log('Médico conectado:', socket.id, nombre);
     socket.emit('conectado-como-medico', { medicosActivos: medicos.size });
-    notificarColaAMedicos();
-    notificarPosicionAPacientes();
+
+    programarNotificacion();
   });
 
+  // Paciente solicita llamada
   socket.on('llamar-medico', (data) => {
+    if (!checkRateLimit(socket.id)) {
+      socket.emit('error', { mensaje: 'Demasiadas solicitudes' });
+      return;
+    }
+
     console.log('Paciente solicita llamada:', data);
 
     // Verificar si hay médicos conectados
@@ -86,39 +236,61 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Agregar a la cola si no está ya
-    const yaEnCola = colaPacientes.find(p => p.socketId === socket.id);
-    if (!yaEnCola) {
-      colaPacientes.push({
-        socketId: socket.id,
-        nombre: data.nombre || 'Paciente',
-        timestamp: Date.now()
-      });
-      console.log('Paciente agregado a cola. Total en cola:', colaPacientes.length);
+    // Agregar a la cola
+    const nombre = sanitizeString(data?.nombre) || 'Paciente';
+    const paciente = agregarPacienteACola(socket.id, nombre);
+
+    if (!paciente) {
+      socket.emit('error', { mensaje: 'Cola llena, intente más tarde' });
+      return;
     }
 
-    // Notificar posición al paciente
-    const posicion = colaPacientes.findIndex(p => p.socketId === socket.id) + 1;
+    console.log('Paciente agregado a cola. Total en cola:', colaOrden.length);
+
+    // Unir al room de pacientes
+    socket.join('pacientes');
+
+    // Notificar posición al paciente inmediatamente
+    const posicion = obtenerPosicionEnCola(socket.id);
+    const medicosDisponibles = Array.from(medicos.values()).filter(m => m.disponible).length;
+
     socket.emit('en-cola', {
       posicion,
-      total: colaPacientes.length,
-      medicosDisponibles: Array.from(medicos.values()).filter(m => m.disponible).length
+      total: colaOrden.length,
+      medicosDisponibles
     });
 
-    // Notificar a todos los médicos
-    notificarColaAMedicos();
-    notificarPosicionAPacientes();
+    // Programar notificación a médicos
+    programarNotificacion();
   });
 
+  // Paciente cancela llamada
   socket.on('cancelar-llamada', () => {
-    colaPacientes = colaPacientes.filter(p => p.socketId !== socket.id);
-    console.log('Paciente canceló llamada. Total en cola:', colaPacientes.length);
-    notificarColaAMedicos();
-    notificarPosicionAPacientes();
+    if (!checkRateLimit(socket.id)) return;
+
+    if (removerPacienteDeCola(socket.id)) {
+      socket.leave('pacientes');
+      console.log('Paciente canceló llamada. Total en cola:', colaOrden.length);
+      programarNotificacion();
+    }
   });
 
+  // Médico acepta paciente
   socket.on('medico-acepta', (data) => {
-    console.log('Médico acepta llamada de:', data.pacienteId);
+    if (!checkRateLimit(socket.id)) {
+      socket.emit('error', { mensaje: 'Demasiadas solicitudes' });
+      return;
+    }
+
+    const pacienteId = data?.pacienteId;
+    const roomName = sanitizeString(data?.roomName, 100);
+
+    if (!pacienteId || !roomName) {
+      socket.emit('error', { mensaje: 'Datos inválidos' });
+      return;
+    }
+
+    console.log('Médico acepta llamada de:', pacienteId);
 
     // Marcar médico como ocupado
     const medico = medicos.get(socket.id);
@@ -128,76 +300,144 @@ io.on('connection', (socket) => {
     }
 
     // Remover paciente de la cola
-    colaPacientes = colaPacientes.filter(p => p.socketId !== data.pacienteId);
+    removerPacienteDeCola(pacienteId);
 
     // Notificar al paciente
-    io.to(data.pacienteId).emit('medico-aceptado', {
-      roomName: data.roomName
-    });
+    io.to(pacienteId).emit('medico-aceptado', { roomName });
 
     // Actualizar cola para todos
-    notificarColaAMedicos();
-    notificarPosicionAPacientes();
+    programarNotificacion();
   });
 
+  // Llamada terminada
   socket.on('llamada-terminada', () => {
+    if (!checkRateLimit(socket.id)) return;
+
     const medico = medicos.get(socket.id);
     if (medico) {
       medico.disponible = true;
       medico.enLlamada = false;
       console.log('Médico disponible nuevamente:', socket.id);
-      notificarColaAMedicos();
-      notificarPosicionAPacientes();
+      programarNotificacion();
     }
   });
 
+  // Solicitar cola (para actualización manual)
+  socket.on('solicitar-cola', () => {
+    if (!checkRateLimit(socket.id)) return;
+
+    // Solo responder si es médico
+    if (medicos.has(socket.id)) {
+      const ahora = Date.now();
+      const colaInfo = colaOrden.map((socketId, index) => {
+        const paciente = pacientesEnCola.get(socketId);
+        if (!paciente) return null;
+        return {
+          posicion: index + 1,
+          pacienteId: socketId,
+          nombre: paciente.nombre,
+          esperando: Math.floor((ahora - paciente.timestamp) / 1000)
+        };
+      }).filter(Boolean);
+
+      socket.emit('actualizar-cola', colaInfo);
+    }
+  });
+
+  // Desconexión
   socket.on('disconnect', () => {
     // Si era médico, removerlo
     if (medicos.has(socket.id)) {
       medicos.delete(socket.id);
       console.log('Médico desconectado:', socket.id, 'Médicos restantes:', medicos.size);
-      notificarPosicionAPacientes();
+      programarNotificacion();
     }
 
     // Si era paciente en cola, removerlo
-    const eraEnCola = colaPacientes.find(p => p.socketId === socket.id);
-    if (eraEnCola) {
-      colaPacientes = colaPacientes.filter(p => p.socketId !== socket.id);
-      console.log('Paciente desconectado de cola. Total en cola:', colaPacientes.length);
-      notificarColaAMedicos();
-      notificarPosicionAPacientes();
+    if (pacientesEnCola.has(socket.id)) {
+      removerPacienteDeCola(socket.id);
+      console.log('Paciente desconectado de cola. Total en cola:', colaOrden.length);
+      programarNotificacion();
     }
+
+    // Limpiar rate limit
+    rateLimits.delete(socket.id);
 
     console.log('Cliente desconectado:', socket.id);
   });
 });
 
+// ============================================
+// API ENDPOINTS
+// ============================================
+
 // Generate Twilio token
 app.post('/token', (req, res) => {
-  const { identity, room } = req.body;
+  try {
+    const { identity, room } = req.body;
 
-  const token = new AccessToken(
-    accountSid,
-    apiKeySid,
-    apiKeySecret,
-    { identity: identity }
-  );
+    // Validar entrada
+    if (!identity || !room) {
+      return res.status(400).json({ error: 'identity y room son requeridos' });
+    }
 
-  const videoGrant = new VideoGrant({
-    room: room
-  });
+    const sanitizedIdentity = sanitizeString(identity, 100);
+    const sanitizedRoom = sanitizeString(room, 100);
 
-  token.addGrant(videoGrant);
+    if (!sanitizedIdentity || !sanitizedRoom) {
+      return res.status(400).json({ error: 'Datos inválidos' });
+    }
 
+    const token = new AccessToken(
+      accountSid,
+      apiKeySid,
+      apiKeySecret,
+      { identity: sanitizedIdentity }
+    );
+
+    const videoGrant = new VideoGrant({
+      room: sanitizedRoom
+    });
+
+    token.addGrant(videoGrant);
+
+    res.json({
+      token: token.toJwt(),
+      room: sanitizedRoom
+    });
+  } catch (error) {
+    console.error('Error generando token:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Health check con estadísticas
+app.get('/health', (req, res) => {
   res.json({
-    token: token.toJwt(),
-    room: room
+    status: 'ok',
+    stats: {
+      medicosConectados: medicos.size,
+      medicosDisponibles: Array.from(medicos.values()).filter(m => m.disponible).length,
+      pacientesEnCola: colaOrden.length,
+      conexionesActivas: io.engine.clientsCount
+    }
   });
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+// Stats endpoint para monitoreo
+app.get('/stats', (req, res) => {
+  const medicosInfo = Array.from(medicos.entries()).map(([id, m]) => ({
+    id: id.slice(0, 8) + '...',
+    disponible: m.disponible,
+    enLlamada: m.enLlamada
+  }));
+
+  res.json({
+    medicos: medicosInfo,
+    colaLength: colaOrden.length,
+    conexiones: io.engine.clientsCount,
+    memoria: process.memoryUsage()
+  });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -205,4 +445,6 @@ server.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
   console.log(`Web médico: http://localhost:${PORT}/medico.html`);
   console.log(`Web paciente (test): http://localhost:${PORT}/paciente.html`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Stats: http://localhost:${PORT}/stats`);
 });

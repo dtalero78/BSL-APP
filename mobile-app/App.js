@@ -9,7 +9,7 @@ import {
   Alert,
   Platform,
   Dimensions,
-  Image
+  ImageBackground
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -352,17 +352,15 @@ export default function App() {
 
   // Pantalla Home
   const renderHome = () => (
-    <View style={styles.homeContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+    <ImageBackground
+      source={require('./assets/home-bg.png')}
+      style={styles.homeContainer}
+      resizeMode="cover"
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Logo centrado */}
-      <View style={styles.logoContainer}>
-        <Image
-          source={require('./assets/bsl-logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
+      {/* Espacio flexible para empujar botones hacia abajo */}
+      <View style={styles.spacer} />
 
       {/* Botones en la parte inferior */}
       <View style={styles.buttonsContainer}>
@@ -387,7 +385,7 @@ export default function App() {
           <Text style={[styles.mainButtonText, styles.outlineButtonText]}>Descargar Certificado</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ImageBackground>
   );
 
   // Pantalla de Urgencia (esperando médico)
@@ -547,17 +545,9 @@ const styles = StyleSheet.create({
   // Home Screen
   homeContainer: {
     flex: 1,
-    backgroundColor: colors.white,
   },
-  logoContainer: {
+  spacer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  logo: {
-    width: width * 0.7,
-    height: width * 0.5,
   },
   buttonsContainer: {
     paddingHorizontal: 20,

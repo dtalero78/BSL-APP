@@ -28,6 +28,7 @@ import {
   TwilioVideoParticipantView
 } from 'react-native-twilio-video-webrtc';
 import { config } from './config';
+import { Feather } from '@expo/vector-icons';
 
 // Configurar cómo se muestran las notificaciones cuando la app está abierta
 Notifications.setNotificationHandler({
@@ -693,13 +694,6 @@ export default function App() {
       {/* Botones en la parte inferior */}
       <View style={styles.buttonsContainer}>
         <TouchableOpacity
-          style={[styles.mainButton, { backgroundColor: colors.laPalma }]}
-          onPress={handleUrgenciaMedica}
-        >
-          <Text style={styles.mainButtonText}>Urgencia Médica</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={[styles.mainButton, styles.outlineButton]}
           onPress={handleAgendarConsulta}
         >
@@ -711,6 +705,13 @@ export default function App() {
           onPress={handleDescargarCertificado}
         >
           <Text style={[styles.mainButtonText, styles.outlineButtonText]}>Descargar Certificado</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mainButton, { backgroundColor: colors.laPalma }]}
+          onPress={handleUrgenciaMedica}
+        >
+          <Text style={styles.mainButtonText}>Urgencia Médica</Text>
         </TouchableOpacity>
       </View>
     </ImageBackground>
@@ -988,7 +989,7 @@ export default function App() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <View style={styles.encryptedBadge}>
-            <Text style={styles.encryptedIcon}>🔒</Text>
+            <Feather name="lock" size={14} color="#4ade80" />
             <Text style={styles.encryptedText}>BSL</Text>
           </View>
         </View>
@@ -1024,26 +1025,30 @@ export default function App() {
       {/* Barra de controles inferior estilo Zoom */}
       <View style={styles.controlsBar}>
         <TouchableOpacity
-          style={styles.controlItem}
+          style={[styles.controlItem, !isAudioEnabled && styles.controlItemOff]}
           onPress={toggleAudio}
         >
-          <Text style={[styles.controlIcon, !isAudioEnabled && styles.controlIconOff]}>
-            {isAudioEnabled ? '🎙️' : '🔇'}
-          </Text>
+          <Feather
+            name={isAudioEnabled ? 'mic' : 'mic-off'}
+            size={24}
+            color={isAudioEnabled ? '#fff' : '#ff4d4d'}
+          />
           <Text style={[styles.controlLabel, !isAudioEnabled && styles.controlLabelOff]}>
             {isAudioEnabled ? 'Mute' : 'Unmute'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.controlItem}
+          style={[styles.controlItem, !isVideoEnabled && styles.controlItemOff]}
           onPress={toggleVideo}
         >
-          <Text style={[styles.controlIcon, !isVideoEnabled && styles.controlIconOff]}>
-            {isVideoEnabled ? '📹' : '📷'}
-          </Text>
+          <Feather
+            name={isVideoEnabled ? 'video' : 'video-off'}
+            size={24}
+            color={isVideoEnabled ? '#fff' : '#ff4d4d'}
+          />
           <Text style={[styles.controlLabel, !isVideoEnabled && styles.controlLabelOff]}>
-            {isVideoEnabled ? 'Stop Video' : 'Start Video'}
+            {isVideoEnabled ? 'Stop' : 'Start'}
           </Text>
         </TouchableOpacity>
 
@@ -1051,7 +1056,7 @@ export default function App() {
           style={styles.controlItem}
           onPress={flipCamera}
         >
-          <Text style={styles.controlIcon}>🔄</Text>
+          <Feather name="refresh-cw" size={24} color="#fff" />
           <Text style={styles.controlLabel}>Flip</Text>
         </TouchableOpacity>
 
@@ -1059,7 +1064,7 @@ export default function App() {
           style={styles.endCallButton}
           onPress={endCall}
         >
-          <Text style={styles.endCallText}>End</Text>
+          <Feather name="phone-off" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
     </View>
@@ -1309,11 +1314,11 @@ const styles = StyleSheet.create({
   controlItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  controlIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+  controlItemOff: {
+    opacity: 0.7,
   },
   controlIconOff: {
     opacity: 0.5,

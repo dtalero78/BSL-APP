@@ -18,6 +18,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import io from 'socket.io-client';
 import {
   TwilioVideo,
@@ -25,6 +28,15 @@ import {
   TwilioVideoParticipantView
 } from 'react-native-twilio-video-webrtc';
 import { config } from './config';
+
+// Configurar cómo se muestran las notificaciones cuando la app está abierta
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 const { width, height } = Dimensions.get('window');
 
@@ -83,11 +95,33 @@ export default function App() {
   const socketRef = useRef(null);
   const twilioRef = useRef(null);
   const roomNameRef = useRef(null);
+  const notificationListener = useRef(null);
+  const responseListener = useRef(null);
 
   useEffect(() => {
     checkUserRegistration();
     requestPermissions();
     connectSocket();
+    registerForPushNotifications();
+
+    // Listener para notificaciones recibidas mientras la app está abierta
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notificación recibida:', notification);
+    });
+
+    // Listener para cuando el usuario toca una notificación
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Usuario tocó notificación:', response);
+      const data = response.notification.request.content.data;
+      // Navegar según el tipo de notificación
+      if (data?.type === 'medico-acepto') {
+        // La app ya maneja esto por socket
+      } else if (data?.type === 'recordatorio-cita') {
+        setCurrentScreen('home');
+      } else if (data?.type === 'certificado-listo') {
+        setCurrentScreen('certificado');
+      }
+    });
 
     return () => {
       if (socketRef.current) {
@@ -96,8 +130,64 @@ export default function App() {
       if (twilioRef.current) {
         twilioRef.current.disconnect();
       }
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
     };
   }, []);
+
+  // Registrar para notificaciones push
+  const registerForPushNotifications = async () => {
+    try {
+      if (!Device.isDevice) {
+        console.log('Push notifications solo funcionan en dispositivos físicos');
+        return;
+      }
+
+      // Verificar permisos existentes
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      // Pedir permisos si no los tiene
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('No se otorgaron permisos para notificaciones');
+        return;
+      }
+
+      // Obtener el token de Expo Push
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      const token = await Notifications.getExpoPushTokenAsync({
+        projectId: projectId,
+      });
+
+      console.log('Push token:', token.data);
+
+      // Guardar token localmente
+      await AsyncStorage.setItem('pushToken', token.data);
+
+      // Configurar canal de Android
+      if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#16a330',
+        });
+      }
+
+      return token.data;
+    } catch (error) {
+      console.error('Error registrando push notifications:', error);
+    }
+  };
 
   const checkUserRegistration = async () => {
     try {
@@ -126,10 +216,26 @@ export default function App() {
     }
 
     try {
+      // Obtener push token
+      const pushToken = await AsyncStorage.getItem('pushToken');
+
       const user = {
         nombre: registerName.trim(),
-        celular: registerPhone.trim()
+        celular: registerPhone.trim(),
+        pushToken: pushToken
       };
+
+      // Registrar usuario en el servidor
+      try {
+        await fetch(`${config.SERVER_URL}/registrar-usuario`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user)
+        });
+      } catch (e) {
+        console.log('No se pudo registrar en servidor:', e);
+      }
+
       await AsyncStorage.setItem('userData', JSON.stringify(user));
       setUserData(user);
       setCurrentScreen('home');
@@ -337,15 +443,18 @@ export default function App() {
     }
   };
 
-  const llamarMedico = () => {
+  const llamarMedico = async () => {
     if (calling) return;
 
     setCalling(true);
     setStatusMessage('Buscando médico disponible...');
 
     if (socketRef.current && socketRef.current.connected) {
+      const pushToken = await AsyncStorage.getItem('pushToken');
       socketRef.current.emit('llamar-medico', {
-        nombre: userData?.nombre || 'Paciente'
+        nombre: userData?.nombre || 'Paciente',
+        celular: userData?.celular,
+        pushToken: pushToken
       });
     } else {
       setCalling(false);

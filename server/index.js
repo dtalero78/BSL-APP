@@ -6,6 +6,10 @@ const twilio = require('twilio');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
+const { Expo } = require('expo-server-sdk');
+
+// Inicializar cliente de Expo Push
+const expo = new Expo();
 
 const app = express();
 const server = http.createServer(app);
@@ -85,6 +89,61 @@ const CONFIG = {
 function sanitizeString(str, maxLength = CONFIG.MAX_NOMBRE_LENGTH) {
   if (typeof str !== 'string') return '';
   return str.trim().slice(0, maxLength).replace(/[<>]/g, '');
+}
+
+// Enviar notificación push
+async function sendPushNotification(pushToken, title, body, data = {}) {
+  if (!pushToken || !Expo.isExpoPushToken(pushToken)) {
+    console.log('Token de push inválido:', pushToken);
+    return;
+  }
+
+  const message = {
+    to: pushToken,
+    sound: 'default',
+    title: title,
+    body: body,
+    data: data,
+  };
+
+  try {
+    const chunks = expo.chunkPushNotifications([message]);
+    for (const chunk of chunks) {
+      const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+      console.log('Notificación enviada:', ticketChunk);
+    }
+  } catch (error) {
+    console.error('Error enviando notificación push:', error);
+  }
+}
+
+// Enviar notificaciones a múltiples tokens
+async function sendPushNotifications(pushTokens, title, body, data = {}) {
+  const messages = [];
+
+  for (const pushToken of pushTokens) {
+    if (Expo.isExpoPushToken(pushToken)) {
+      messages.push({
+        to: pushToken,
+        sound: 'default',
+        title: title,
+        body: body,
+        data: data,
+      });
+    }
+  }
+
+  if (messages.length === 0) return;
+
+  try {
+    const chunks = expo.chunkPushNotifications(messages);
+    for (const chunk of chunks) {
+      const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+      console.log('Notificaciones enviadas:', ticketChunk);
+    }
+  } catch (error) {
+    console.error('Error enviando notificaciones push:', error);
+  }
 }
 
 // Rate limiting por socket
@@ -168,7 +227,7 @@ function ejecutarNotificaciones() {
 // GESTIÓN DE COLA OPTIMIZADA
 // ============================================
 
-function agregarPacienteACola(socketId, nombre) {
+function agregarPacienteACola(socketId, nombre, celular, pushToken) {
   if (pacientesEnCola.has(socketId)) {
     return pacientesEnCola.get(socketId);
   }
@@ -179,6 +238,8 @@ function agregarPacienteACola(socketId, nombre) {
 
   const paciente = {
     nombre: sanitizeString(nombre) || 'Paciente',
+    celular: sanitizeString(celular, 20) || '',
+    pushToken: pushToken || null,
     timestamp: Date.now(),
     posicion: colaOrden.length + 1
   };
@@ -249,7 +310,9 @@ io.on('connection', (socket) => {
 
     // Agregar a la cola
     const nombre = sanitizeString(data?.nombre) || 'Paciente';
-    const paciente = agregarPacienteACola(socket.id, nombre);
+    const celular = data?.celular || '';
+    const pushToken = data?.pushToken || null;
+    const paciente = agregarPacienteACola(socket.id, nombre, celular, pushToken);
 
     if (!paciente) {
       socket.emit('error', { mensaje: 'Cola llena, intente más tarde' });
@@ -303,6 +366,9 @@ io.on('connection', (socket) => {
 
     console.log('Médico acepta llamada de:', pacienteId);
 
+    // Obtener datos del paciente antes de removerlo
+    const paciente = pacientesEnCola.get(pacienteId);
+
     // Marcar médico como ocupado
     const medico = medicos.get(socket.id);
     if (medico) {
@@ -310,10 +376,20 @@ io.on('connection', (socket) => {
       medico.enLlamada = true;
     }
 
+    // Enviar notificación push al paciente
+    if (paciente?.pushToken) {
+      sendPushNotification(
+        paciente.pushToken,
+        '¡Médico disponible!',
+        'Un médico está listo para atenderle. Abra la app para conectarse.',
+        { type: 'medico-acepto', roomName: roomName }
+      );
+    }
+
     // Remover paciente de la cola
     removerPacienteDeCola(pacienteId);
 
-    // Notificar al paciente
+    // Notificar al paciente por socket
     io.to(pacienteId).emit('medico-aceptado', { roomName });
 
     // Actualizar cola para todos
@@ -543,6 +619,119 @@ app.get('/buscar-certificado/:numeroId', async (req, res) => {
   } catch (error) {
     console.error('Error buscando certificado:', error);
     res.status(500).json({ error: 'Error al buscar el certificado' });
+  }
+});
+
+// Registrar usuario con push token
+app.post('/registrar-usuario', async (req, res) => {
+  try {
+    const { nombre, celular, pushToken } = req.body;
+
+    if (!celular) {
+      return res.status(400).json({ error: 'Celular requerido' });
+    }
+
+    // Guardar en base de datos (tabla usuarios_app)
+    const query = `
+      INSERT INTO "usuarios_app" ("celular", "nombre", "pushToken", "fechaRegistro")
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT ("celular") DO UPDATE SET
+        "nombre" = EXCLUDED."nombre",
+        "pushToken" = EXCLUDED."pushToken"
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, [
+      sanitizeString(celular, 20),
+      sanitizeString(nombre),
+      pushToken
+    ]);
+
+    console.log('Usuario registrado:', result.rows[0]);
+    res.json({ success: true, usuario: result.rows[0] });
+
+  } catch (error) {
+    // Si la tabla no existe, crearla
+    if (error.code === '42P01') {
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS "usuarios_app" (
+            "celular" VARCHAR(20) PRIMARY KEY,
+            "nombre" VARCHAR(100),
+            "pushToken" TEXT,
+            "fechaRegistro" TIMESTAMP DEFAULT NOW()
+          )
+        `);
+        // Reintentar
+        const { nombre, celular, pushToken } = req.body;
+        const result = await pool.query(
+          `INSERT INTO "usuarios_app" ("celular", "nombre", "pushToken", "fechaRegistro") VALUES ($1, $2, $3, NOW()) RETURNING *`,
+          [sanitizeString(celular, 20), sanitizeString(nombre), pushToken]
+        );
+        return res.json({ success: true, usuario: result.rows[0] });
+      } catch (e) {
+        console.error('Error creando tabla:', e);
+      }
+    }
+    console.error('Error registrando usuario:', error);
+    res.status(500).json({ error: 'Error al registrar usuario' });
+  }
+});
+
+// Enviar notificación a un usuario específico (por celular)
+app.post('/enviar-notificacion', async (req, res) => {
+  try {
+    const { celular, titulo, mensaje, data } = req.body;
+
+    if (!celular || !titulo || !mensaje) {
+      return res.status(400).json({ error: 'celular, titulo y mensaje son requeridos' });
+    }
+
+    // Buscar push token del usuario
+    const result = await pool.query(
+      'SELECT "pushToken" FROM "usuarios_app" WHERE "celular" = $1',
+      [celular]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].pushToken) {
+      return res.status(404).json({ error: 'Usuario no encontrado o sin token de push' });
+    }
+
+    await sendPushNotification(result.rows[0].pushToken, titulo, mensaje, data || {});
+    res.json({ success: true, mensaje: 'Notificación enviada' });
+
+  } catch (error) {
+    console.error('Error enviando notificación:', error);
+    res.status(500).json({ error: 'Error al enviar notificación' });
+  }
+});
+
+// Enviar notificación a todos los usuarios (consejos de salud, etc.)
+app.post('/enviar-notificacion-masiva', async (req, res) => {
+  try {
+    const { titulo, mensaje, data } = req.body;
+
+    if (!titulo || !mensaje) {
+      return res.status(400).json({ error: 'titulo y mensaje son requeridos' });
+    }
+
+    // Obtener todos los push tokens
+    const result = await pool.query(
+      'SELECT "pushToken" FROM "usuarios_app" WHERE "pushToken" IS NOT NULL'
+    );
+
+    const tokens = result.rows.map(r => r.pushToken).filter(Boolean);
+
+    if (tokens.length === 0) {
+      return res.status(404).json({ error: 'No hay usuarios con tokens de push' });
+    }
+
+    await sendPushNotifications(tokens, titulo, mensaje, data || { type: 'consejo-salud' });
+    res.json({ success: true, mensaje: `Notificación enviada a ${tokens.length} usuarios` });
+
+  } catch (error) {
+    console.error('Error enviando notificación masiva:', error);
+    res.status(500).json({ error: 'Error al enviar notificaciones' });
   }
 });
 

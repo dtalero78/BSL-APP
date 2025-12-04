@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Linking
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
 import io from 'socket.io-client';
@@ -42,7 +43,7 @@ const colors = {
 };
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('home');
+  const [currentScreen, setCurrentScreen] = useState('loading');
   const [status, setStatus] = useState('disconnected');
   const [statusMessage, setStatusMessage] = useState('Conectando...');
   const [hasPermission, setHasPermission] = useState(false);
@@ -54,6 +55,11 @@ export default function App() {
   const [queuePosition, setQueuePosition] = useState(null);
   const [queueTotal, setQueueTotal] = useState(0);
   const [medicosDisponibles, setMedicosDisponibles] = useState(0);
+
+  // Estado del usuario registrado
+  const [userData, setUserData] = useState(null);
+  const [registerName, setRegisterName] = useState('');
+  const [registerPhone, setRegisterPhone] = useState('');
 
   // Estado del formulario de agendar consulta
   const [formData, setFormData] = useState({
@@ -79,6 +85,7 @@ export default function App() {
   const roomNameRef = useRef(null);
 
   useEffect(() => {
+    checkUserRegistration();
     requestPermissions();
     connectSocket();
 
@@ -91,6 +98,46 @@ export default function App() {
       }
     };
   }, []);
+
+  const checkUserRegistration = async () => {
+    try {
+      const storedUser = await AsyncStorage.getItem('userData');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        setUserData(user);
+        setCurrentScreen('home');
+      } else {
+        setCurrentScreen('register');
+      }
+    } catch (error) {
+      console.error('Error checking user registration:', error);
+      setCurrentScreen('register');
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!registerName.trim()) {
+      Alert.alert('Campo Requerido', 'Por favor ingrese su nombre.');
+      return;
+    }
+    if (!registerPhone.trim()) {
+      Alert.alert('Campo Requerido', 'Por favor ingrese su número de celular.');
+      return;
+    }
+
+    try {
+      const user = {
+        nombre: registerName.trim(),
+        celular: registerPhone.trim()
+      };
+      await AsyncStorage.setItem('userData', JSON.stringify(user));
+      setUserData(user);
+      setCurrentScreen('home');
+    } catch (error) {
+      console.error('Error saving user data:', error);
+      Alert.alert('Error', 'No se pudo guardar la información. Intente nuevamente.');
+    }
+  };
 
   const requestPermissions = async () => {
     try {
@@ -298,7 +345,7 @@ export default function App() {
 
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit('llamar-medico', {
-        nombre: 'Paciente'
+        nombre: userData?.nombre || 'Paciente'
       });
     } else {
       setCalling(false);
@@ -461,6 +508,66 @@ export default function App() {
       return newTracks;
     });
   };
+
+  // Pantalla de carga inicial
+  const renderLoading = () => (
+    <View style={styles.loadingContainer}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      <ActivityIndicator size="large" color={colors.laPalma} />
+    </View>
+  );
+
+  // Pantalla de Registro
+  const renderRegister = () => (
+    <ImageBackground
+      source={require('./assets/home-bg.png')}
+      style={styles.homeContainer}
+      resizeMode="cover"
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+
+      <KeyboardAvoidingView
+        style={styles.registerContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* Espacio flexible */}
+        <View style={styles.spacer} />
+
+        {/* Formulario de registro */}
+        <View style={styles.registerForm}>
+          <Text style={styles.registerTitle}>Bienvenido</Text>
+          <Text style={styles.registerSubtitle}>
+            Para continuar, ingrese sus datos
+          </Text>
+
+          <TextInput
+            style={styles.registerInput}
+            value={registerName}
+            onChangeText={setRegisterName}
+            placeholder="Su nombre"
+            placeholderTextColor="#999"
+            autoCapitalize="words"
+          />
+
+          <TextInput
+            style={styles.registerInput}
+            value={registerPhone}
+            onChangeText={setRegisterPhone}
+            placeholder="Número de celular"
+            placeholderTextColor="#999"
+            keyboardType="phone-pad"
+          />
+
+          <TouchableOpacity
+            style={[styles.mainButton, { backgroundColor: colors.laPalma }]}
+            onPress={handleRegister}
+          >
+            <Text style={styles.mainButtonText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </ImageBackground>
+  );
 
   // Pantalla Home
   const renderHome = () => (
@@ -851,6 +958,8 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      {currentScreen === 'loading' && renderLoading()}
+      {currentScreen === 'register' && renderRegister()}
       {currentScreen === 'home' && !inCall && renderHome()}
       {currentScreen === 'urgencia' && !inCall && renderUrgencia()}
       {currentScreen === 'agendar' && !inCall && renderAgendarConsulta()}
@@ -1240,5 +1349,49 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
     lineHeight: 24,
+  },
+
+  // Pantalla Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+  },
+
+  // Pantalla Registro
+  registerContainer: {
+    flex: 1,
+  },
+  registerForm: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    marginHorizontal: 20,
+    marginBottom: Platform.OS === 'ios' ? 40 : 30,
+    borderRadius: 16,
+    padding: 24,
+  },
+  registerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.abbey,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  registerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  registerInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.abbey,
+    backgroundColor: '#fafafa',
+    marginBottom: 12,
   },
 });

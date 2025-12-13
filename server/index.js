@@ -390,7 +390,9 @@ io.on('connection', (socket) => {
     removerPacienteDeCola(pacienteId);
 
     // Notificar al paciente por socket
+    console.log('Enviando medico-aceptado a paciente:', pacienteId, 'roomName:', roomName);
     io.to(pacienteId).emit('medico-aceptado', { roomName });
+    console.log('Evento medico-aceptado enviado');
 
     // Actualizar cola para todos
     programarNotificacion();
@@ -461,10 +463,12 @@ io.on('connection', (socket) => {
 // Generate Twilio token
 app.post('/token', (req, res) => {
   try {
+    console.log('Token request recibido:', req.body);
     const { identity, room } = req.body;
 
     // Validar entrada
     if (!identity || !room) {
+      console.log('Token request inválido - faltan parámetros');
       return res.status(400).json({ error: 'identity y room son requeridos' });
     }
 
@@ -488,6 +492,7 @@ app.post('/token', (req, res) => {
 
     token.addGrant(videoGrant);
 
+    console.log('Token generado exitosamente para:', sanitizedIdentity, 'sala:', sanitizedRoom);
     res.json({
       token: token.toJwt(),
       room: sanitizedRoom

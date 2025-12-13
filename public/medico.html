@@ -303,23 +303,17 @@
             height: 480,
             frameRate: 24
           },
-          preferredVideoCodecs: ['H264'],
+          preferredVideoCodecs: ['VP8', 'H264'],
           bandwidthProfile: {
             video: {
-              mode: 'collaboration',
-              maxSubscriptionBitrate: 2500000,
-              dominantSpeakerPriority: 'high',
-              renderDimensions: {
-                high: { width: 640, height: 480 },
-                standard: { width: 320, height: 240 },
-                low: { width: 160, height: 120 }
-              }
+              mode: 'grid',
+              maxSubscriptionBitrate: 1500000,
+              trackSwitchOffMode: 'predicted'
             }
           },
-          networkQuality: {
-            local: 1,
-            remote: 1
-          }
+          networkQuality: false,
+          dominantSpeaker: false,
+          automaticSubscription: true
         });
 
         currentRoom = room;

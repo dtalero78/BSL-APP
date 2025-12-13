@@ -492,12 +492,7 @@ export default function App() {
           accessToken: data.token,
           enableAudio: true,
           enableVideo: true,
-          encodingParameters: {
-            enableH264Codec: true,
-            audioBitrate: 16,
-            videoBitrate: 400
-          },
-          enableNetworkQualityReporting: true
+          enableAutomaticSubscription: true
         });
       }
 

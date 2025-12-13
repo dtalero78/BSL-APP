@@ -347,19 +347,54 @@
     function participantConnected(participant) {
       console.log('Participante conectado:', participant.identity);
 
+      // Manejar tracks ya publicados
       participant.tracks.forEach(publication => {
-        if (publication.track) {
+        if (publication.isSubscribed && publication.track) {
           attachTrack(publication.track);
         }
+        // También escuchar cuando el track se suscriba
+        publication.on('subscribed', attachTrack);
+        publication.on('unsubscribed', detachTrack);
       });
 
+      // Escuchar nuevos tracks que se publiquen
       participant.on('trackSubscribed', attachTrack);
+      participant.on('trackUnsubscribed', detachTrack);
+
+      // También escuchar cuando se publican nuevos tracks
+      participant.on('trackPublished', publication => {
+        console.log('Track publicado:', publication.trackName);
+        if (publication.isSubscribed && publication.track) {
+          attachTrack(publication.track);
+        }
+        publication.on('subscribed', attachTrack);
+      });
     }
 
     function attachTrack(track) {
+      console.log('Adjuntando track:', track.kind, track.sid);
       if (track.kind === 'video') {
         const remoteVideo = document.getElementById('remote-video');
         remoteVideo.srcObject = new MediaStream([track.mediaStreamTrack]);
+        console.log('Video remoto adjuntado correctamente');
+      } else if (track.kind === 'audio') {
+        // Crear elemento de audio para el audio remoto
+        const audioElement = document.createElement('audio');
+        audioElement.id = 'remote-audio-' + track.sid;
+        audioElement.autoplay = true;
+        audioElement.srcObject = new MediaStream([track.mediaStreamTrack]);
+        document.body.appendChild(audioElement);
+        console.log('Audio remoto adjuntado correctamente');
+      }
+    }
+
+    function detachTrack(track) {
+      console.log('Desadjuntando track:', track.kind, track.sid);
+      if (track.kind === 'audio') {
+        const audioElement = document.getElementById('remote-audio-' + track.sid);
+        if (audioElement) {
+          audioElement.remove();
+        }
       }
     }
 

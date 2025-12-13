@@ -605,6 +605,7 @@ export default function App() {
         videoTrackSid: track.trackSid,
         participantIdentity: participant.identity
       });
+      console.log('Total video tracks:', newTracks.size);
       return newTracks;
     });
   };
@@ -617,6 +618,22 @@ export default function App() {
       newTracks.delete(track.trackSid);
       return newTracks;
     });
+  };
+
+  const onParticipantAddedAudioTrack = ({ participant, track }) => {
+    console.log('Audio track agregado:', participant.identity, track.trackSid);
+  };
+
+  const onParticipantRemovedAudioTrack = ({ participant, track }) => {
+    console.log('Audio track removido:', participant.identity, track.trackSid);
+  };
+
+  const onParticipantEnabledVideoTrack = ({ participant, track }) => {
+    console.log('Video track habilitado:', participant.identity, track.trackSid);
+  };
+
+  const onParticipantDisabledVideoTrack = ({ participant, track }) => {
+    console.log('Video track deshabilitado:', participant.identity, track.trackSid);
   };
 
   // Pantalla de carga inicial
@@ -1088,6 +1105,10 @@ export default function App() {
         onRoomDidFailToConnect={onRoomDidFailToConnect}
         onParticipantAddedVideoTrack={onParticipantAddedVideoTrack}
         onParticipantRemovedVideoTrack={onParticipantRemovedVideoTrack}
+        onParticipantAddedAudioTrack={onParticipantAddedAudioTrack}
+        onParticipantRemovedAudioTrack={onParticipantRemovedAudioTrack}
+        onParticipantEnabledVideoTrack={onParticipantEnabledVideoTrack}
+        onParticipantDisabledVideoTrack={onParticipantDisabledVideoTrack}
       />
     </View>
   );

@@ -54,6 +54,9 @@ const apiKeySecret = process.env.TWILIO_API_KEY_SECRET || 'YOUR_API_KEY_SECRET';
 const AccessToken = twilio.jwt.AccessToken;
 const VideoGrant = AccessToken.VideoGrant;
 
+// Cliente de Twilio para crear salas
+const twilioClient = twilio(accountSid, authToken);
+
 // ============================================
 // ESTRUCTURAS DE DATOS OPTIMIZADAS
 // ============================================
@@ -461,7 +464,7 @@ io.on('connection', (socket) => {
 // ============================================
 
 // Generate Twilio token
-app.post('/token', (req, res) => {
+app.post('/token', async (req, res) => {
   try {
     console.log('Token request recibido:', req.body);
     const { identity, room } = req.body;
@@ -479,11 +482,26 @@ app.post('/token', (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
+    // Crear sala peer-to-peer (más rápido para 2 participantes)
+    try {
+      await twilioClient.video.v1.rooms.create({
+        uniqueName: sanitizedRoom,
+        type: 'peer-to-peer',
+        maxParticipants: 2
+      });
+      console.log('Sala peer-to-peer creada:', sanitizedRoom);
+    } catch (e) {
+      // Error 53113 = sala ya existe, está bien
+      if (e.code !== 53113) {
+        console.log('Error creando sala (puede que ya exista):', e.code, e.message);
+      }
+    }
+
     const token = new AccessToken(
       accountSid,
       apiKeySid,
       apiKeySecret,
-      { identity: sanitizedIdentity }
+      { identity: sanitizedIdentity, ttl: 3600 }
     );
 
     const videoGrant = new VideoGrant({

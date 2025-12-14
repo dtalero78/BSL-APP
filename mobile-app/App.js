@@ -22,11 +22,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import io from 'socket.io-client';
-import {
-  TwilioVideo,
-  TwilioVideoLocalView,
-  TwilioVideoParticipantView
-} from 'react-native-twilio-video-webrtc';
+import { WebView } from 'react-native-webview';
 import { config } from './config';
 import { Feather } from '@expo/vector-icons';
 
@@ -63,8 +59,6 @@ export default function App() {
   const [calling, setCalling] = useState(false);
   const [inCall, setInCall] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
-  const [videoTracks, setVideoTracks] = useState(new Map());
   const [queuePosition, setQueuePosition] = useState(null);
   const [queueTotal, setQueueTotal] = useState(0);
   const [medicosDisponibles, setMedicosDisponibles] = useState(0);
@@ -94,7 +88,7 @@ export default function App() {
   const [isSearchingCertificado, setIsSearchingCertificado] = useState(false);
 
   const socketRef = useRef(null);
-  const twilioRef = useRef(null);
+  const webViewRef = useRef(null);
   const roomNameRef = useRef(null);
   const notificationListener = useRef(null);
   const responseListener = useRef(null);
@@ -464,65 +458,29 @@ export default function App() {
     }
   };
 
+  // WebView se conecta automáticamente, esta función ya no es necesaria
+  // pero la mantenemos para compatibilidad con el flujo existente
   const startVideoCall = async (roomName) => {
-    try {
-      console.log('=== INICIANDO VIDEO CALL ===');
-      console.log('Room name:', roomName);
-      console.log('twilioRef.current existe:', !!twilioRef.current);
+    console.log('=== INICIANDO VIDEO CALL CON WEBVIEW ===');
+    console.log('Room name:', roomName);
+    roomNameRef.current = roomName;
 
-      const response = await fetch(`${config.SERVER_URL}/token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          identity: 'paciente-' + Date.now(),
-          room: roomName
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Token recibido correctamente');
-      console.log('Sala a conectar:', data.room);
-
-      if (twilioRef.current) {
-        // Pequeño delay para asegurar que la cámara esté completamente inicializada
-        // Esto evita que el track llegue "muted" al médico
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        console.log('Llamando a twilioRef.connect()...');
-        twilioRef.current.connect({
-          roomName: roomName,
-          accessToken: data.token,
-          enableAudio: true,
-          enableVideo: true
-        });
-        console.log('twilioRef.connect() llamado exitosamente');
-      } else {
-        console.error('ERROR: twilioRef.current es null');
-        Alert.alert('Error', 'Componente de video no disponible');
-      }
-
-    } catch (error) {
-      console.error('Error starting video call:', error);
-      Alert.alert('Error', 'No se pudo iniciar la videollamada: ' + error.message);
-      setCalling(false);
-      setStatusMessage('Error al conectar video');
-    }
+    // El WebView manejará la conexión automáticamente
+    setInCall(true);
+    setCalling(false);
+    setStatusMessage('Conectando...');
   };
 
   const endCall = () => {
     console.log('Finalizando llamada');
-    if (twilioRef.current) {
-      twilioRef.current.disconnect();
+
+    // Enviar mensaje al WebView para desconectar
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({ type: 'HANGUP' }));
     }
+
     setInCall(false);
     setCalling(false);
-    setVideoTracks(new Map());
     setQueuePosition(null);
     setCurrentScreen('home');
     setStatusMessage('Conectado');
@@ -540,131 +498,66 @@ export default function App() {
   };
 
   const toggleAudio = () => {
-    if (twilioRef.current) {
-      twilioRef.current.setLocalAudioEnabled(!isAudioEnabled)
-        .then(enabled => {
-          setIsAudioEnabled(enabled);
-          console.log('Audio:', enabled ? 'habilitado' : 'deshabilitado');
-        });
-    }
-  };
+    const newState = !isAudioEnabled;
+    setIsAudioEnabled(newState);
 
-  const toggleVideo = () => {
-    if (twilioRef.current) {
-      twilioRef.current.setLocalVideoEnabled(!isVideoEnabled)
-        .then(enabled => {
-          setIsVideoEnabled(enabled);
-          console.log('Video:', enabled ? 'habilitado' : 'deshabilitado');
-        });
+    // Enviar mensaje al WebView
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'TOGGLE_AUDIO',
+        enabled: newState
+      }));
     }
+
+    console.log('Audio:', newState ? 'habilitado' : 'deshabilitado');
   };
 
   const flipCamera = () => {
-    if (twilioRef.current) {
-      twilioRef.current.flipCamera();
+    // Enviar mensaje al WebView para cambiar cámara
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({ type: 'FLIP_CAMERA' }));
     }
+    console.log('Flip camera solicitado');
   };
 
-  // Eventos de Twilio Video
-  const onRoomDidConnect = ({ roomName, error, localParticipant, participants }) => {
-    if (error) {
-      console.error('Error conectando a sala:', error);
-      Alert.alert('Error', 'No se pudo conectar a la videollamada');
-      setCalling(false);
-      return;
-    }
+  // Handler para mensajes del WebView
+  const handleWebViewMessage = (event) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+      console.log('Mensaje del WebView:', message);
 
-    console.log('=== TWILIO: Conectado a sala ===');
-    console.log('Room name:', roomName);
-    console.log('Local participant:', JSON.stringify(localParticipant));
-    console.log('Remote participants:', JSON.stringify(participants));
-    console.log('Estado actual - inCall:', inCall, 'calling:', calling);
+      switch (message.type) {
+        case 'ROOM_CONNECTED':
+          console.log('=== WEBVIEW: Conectado a sala ===');
+          console.log('Room name:', message.roomName);
+          setInCall(true);
+          setCalling(false);
+          setStatusMessage('En llamada con el médico');
+          break;
 
-    setInCall(true);
-    setCalling(false);
-    setStatusMessage('En llamada con el médico');
+        case 'ROOM_DISCONNECTED':
+          console.log('=== WEBVIEW: Desconectado de sala ===');
+          setInCall(false);
+          setCalling(false);
+          setQueuePosition(null);
+          setCurrentScreen('home');
+          setStatusMessage('Llamada finalizada');
+          break;
 
-    // Forzar habilitación de video después de conectar para asegurar publicación
-    // Esto resuelve el problema de timing donde el track llega muted
-    setTimeout(() => {
-      if (twilioRef.current) {
-        console.log('Re-habilitando video después de conectar...');
-        twilioRef.current.setLocalVideoEnabled(false);
-        setTimeout(() => {
-          twilioRef.current.setLocalVideoEnabled(true);
-          console.log('Video re-habilitado');
-        }, 100);
+        case 'ERROR':
+          console.error('=== WEBVIEW: Error ===', message.error);
+          Alert.alert('Error de Conexión', message.error);
+          setInCall(false);
+          setCalling(false);
+          setCurrentScreen('home');
+          break;
+
+        default:
+          console.log('Mensaje desconocido del WebView:', message.type);
       }
-    }, 1000);
-
-    console.log('=== Estados actualizados ===');
-  };
-
-  const onRoomDidDisconnect = ({ roomName, error }) => {
-    console.log('=== TWILIO: Desconectado de sala ===');
-    console.log('Room name:', roomName);
-    console.log('Error:', error ? JSON.stringify(error) : 'ninguno');
-    console.log('Estado antes - inCall:', inCall, 'calling:', calling);
-
-    setInCall(false);
-    setCalling(false);
-    setVideoTracks(new Map());
-    setQueuePosition(null);
-    setCurrentScreen('home');
-    setStatusMessage('Llamada finalizada');
-
-    console.log('=== Desconexión procesada ===');
-  };
-
-  const onRoomDidFailToConnect = ({ roomName, error }) => {
-    console.log('=== TWILIO: Fallo al conectar ===');
-    console.log('Room name:', roomName);
-    console.log('Error:', error ? JSON.stringify(error) : 'desconocido');
-    Alert.alert('Error de Conexión', 'No se pudo conectar a la videollamada: ' + (error || 'Error desconocido'));
-    setInCall(false);
-    setCalling(false);
-    setCurrentScreen('home');
-  };
-
-  const onParticipantAddedVideoTrack = ({ participant, track }) => {
-    console.log('Video track agregado:', participant.identity, track.trackSid);
-
-    setVideoTracks(prevTracks => {
-      const newTracks = new Map(prevTracks);
-      newTracks.set(track.trackSid, {
-        participantSid: participant.sid,
-        videoTrackSid: track.trackSid,
-        participantIdentity: participant.identity
-      });
-      console.log('Total video tracks:', newTracks.size);
-      return newTracks;
-    });
-  };
-
-  const onParticipantRemovedVideoTrack = ({ participant, track }) => {
-    console.log('Video track removido:', participant.identity, track.trackSid);
-
-    setVideoTracks(prevTracks => {
-      const newTracks = new Map(prevTracks);
-      newTracks.delete(track.trackSid);
-      return newTracks;
-    });
-  };
-
-  const onParticipantAddedAudioTrack = ({ participant, track }) => {
-    console.log('Audio track agregado:', participant.identity, track.trackSid);
-  };
-
-  const onParticipantRemovedAudioTrack = ({ participant, track }) => {
-    console.log('Audio track removido:', participant.identity, track.trackSid);
-  };
-
-  const onParticipantEnabledVideoTrack = ({ participant, track }) => {
-    console.log('Video track habilitado:', participant.identity, track.trackSid);
-  };
-
-  const onParticipantDisabledVideoTrack = ({ participant, track }) => {
-    console.log('Video track deshabilitado:', participant.identity, track.trackSid);
+    } catch (error) {
+      console.error('Error procesando mensaje del WebView:', error);
+    }
   };
 
   // Pantalla de carga inicial
@@ -1026,97 +919,63 @@ export default function App() {
   );
 
   // Pantalla de videollamada estilo Zoom
-  const renderVideoCall = () => (
-    <View style={styles.videoContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
+  const renderVideoCall = () => {
+    const roomName = roomNameRef.current;
+    const identity = 'paciente-' + Date.now();
 
-      {/* Header */}
-      <View style={styles.videoHeader}>
-        <TouchableOpacity style={styles.headerBackButton} onPress={endCall}>
-          <Text style={styles.headerBackText}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <View style={styles.encryptedBadge}>
-            <Feather name="lock" size={14} color="#4ade80" />
-            <Text style={styles.encryptedText}>BSL</Text>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.headerEndButton} onPress={endCall}>
-          <Text style={styles.headerEndText}>Salir</Text>
-        </TouchableOpacity>
-      </View>
+    return (
+      <View style={styles.videoContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#000" />
 
-      {/* Video remoto (médico) - pantalla completa */}
-      <View style={styles.remoteVideoContainer}>
-        {Array.from(videoTracks, ([trackSid, trackIdentifier]) => (
-          <TwilioVideoParticipantView
-            style={styles.remoteVideo}
-            key={trackSid}
-            trackIdentifier={trackIdentifier}
-          />
-        ))}
-        {videoTracks.size === 0 && (
-          <View style={styles.waitingDoctor}>
-            <Text style={styles.waitingDoctorText}>Esperando al médico...</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Video local (paciente) - esquina superior derecha */}
-      <View style={styles.localVideoWrapper}>
-        <TwilioVideoLocalView
-          enabled={true}
-          style={styles.localVideo}
+        {/* WebView con el video */}
+        <WebView
+          ref={webViewRef}
+          source={{
+            uri: `${config.SERVER_URL}/paciente-mobile.html?room=${roomName}&identity=${identity}`
+          }}
+          onMessage={handleWebViewMessage}
+          mediaPlaybackRequiresUserAction={false}
+          allowsInlineMediaPlayback={true}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          mediaCapture="camera,microphone"
+          style={styles.webView}
         />
+
+        {/* Barra de controles inferior estilo Zoom */}
+        <View style={styles.controlsBar}>
+          <TouchableOpacity
+            style={[styles.controlItem, !isAudioEnabled && styles.controlItemOff]}
+            onPress={toggleAudio}
+          >
+            <Feather
+              name={isAudioEnabled ? 'mic' : 'mic-off'}
+              size={24}
+              color={isAudioEnabled ? '#fff' : '#ff4d4d'}
+            />
+            <Text style={[styles.controlLabel, !isAudioEnabled && styles.controlLabelOff]}>
+              {isAudioEnabled ? 'Mute' : 'Unmute'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.controlItem}
+            onPress={flipCamera}
+          >
+            <Feather name="refresh-cw" size={24} color="#fff" />
+            <Text style={styles.controlLabel}>Flip</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.endCallButton}
+            onPress={endCall}
+          >
+            <Feather name="phone-off" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
-
-      {/* Barra de controles inferior estilo Zoom */}
-      <View style={styles.controlsBar}>
-        <TouchableOpacity
-          style={[styles.controlItem, !isAudioEnabled && styles.controlItemOff]}
-          onPress={toggleAudio}
-        >
-          <Feather
-            name={isAudioEnabled ? 'mic' : 'mic-off'}
-            size={24}
-            color={isAudioEnabled ? '#fff' : '#ff4d4d'}
-          />
-          <Text style={[styles.controlLabel, !isAudioEnabled && styles.controlLabelOff]}>
-            {isAudioEnabled ? 'Mute' : 'Unmute'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlItem, !isVideoEnabled && styles.controlItemOff]}
-          onPress={toggleVideo}
-        >
-          <Feather
-            name={isVideoEnabled ? 'video' : 'video-off'}
-            size={24}
-            color={isVideoEnabled ? '#fff' : '#ff4d4d'}
-          />
-          <Text style={[styles.controlLabel, !isVideoEnabled && styles.controlLabelOff]}>
-            {isVideoEnabled ? 'Stop' : 'Start'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.controlItem}
-          onPress={flipCamera}
-        >
-          <Feather name="refresh-cw" size={24} color="#fff" />
-          <Text style={styles.controlLabel}>Flip</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.endCallButton}
-          onPress={endCall}
-        >
-          <Feather name="phone-off" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -1127,20 +986,6 @@ export default function App() {
       {currentScreen === 'agendar' && !inCall && renderAgendarConsulta()}
       {currentScreen === 'certificado' && !inCall && renderCertificado()}
       {inCall && renderVideoCall()}
-
-      {/* Componente TwilioVideo - invisible pero necesario */}
-      <TwilioVideo
-        ref={twilioRef}
-        onRoomDidConnect={onRoomDidConnect}
-        onRoomDidDisconnect={onRoomDidDisconnect}
-        onRoomDidFailToConnect={onRoomDidFailToConnect}
-        onParticipantAddedVideoTrack={onParticipantAddedVideoTrack}
-        onParticipantRemovedVideoTrack={onParticipantRemovedVideoTrack}
-        onParticipantAddedAudioTrack={onParticipantAddedAudioTrack}
-        onParticipantRemovedAudioTrack={onParticipantRemovedAudioTrack}
-        onParticipantEnabledVideoTrack={onParticipantEnabledVideoTrack}
-        onParticipantDisabledVideoTrack={onParticipantDisabledVideoTrack}
-      />
     </View>
   );
 }
@@ -1255,7 +1100,11 @@ const styles = StyleSheet.create({
   // Video Call Screen - Zoom Style
   videoContainer: {
     flex: 1,
-    backgroundColor: '#1c1c1c',
+    backgroundColor: '#000',
+  },
+  webView: {
+    flex: 1,
+    backgroundColor: '#000',
   },
   videoHeader: {
     position: 'absolute',

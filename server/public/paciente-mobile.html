@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BSL Video Consulta</title>
+
+  <!-- Twilio Video SDK -->
+  <script src="https://media.twiliocdn.com/sdk/js/video/releases/2.28.1/twilio-video.min.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+
+    #container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Video remoto (médico) - pantalla completa */
+    #remote-video-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #remote-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Placeholder cuando no hay video remoto */
+    #remote-placeholder {
+      color: #fff;
+      font-size: 18px;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #remote-placeholder .avatar {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      font-weight: bold;
+      margin: 0 auto 20px;
+    }
+
+    /* Video local (paciente) - esquina superior derecha */
+    #local-video-container {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 120px;
+      height: 160px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      border: 2px solid #fff;
+      z-index: 10;
+    }
+
+    #local-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror effect */
+    }
+
+    /* Status indicator */
+    #status {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #status.connecting {
+      background: rgba(255, 152, 0, 0.9);
+    }
+
+    #status.connected {
+      background: rgba(76, 175, 80, 0.9);
+    }
+
+    #status.error {
+      background: rgba(244, 67, 54, 0.9);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Hidden audio element for remote audio */
+    #remote-audio {
+      display: none;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top: 3px solid #fff;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Error message */
+    #error-message {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(244, 67, 54, 0.95);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 20;
+      display: none;
+      max-width: 80%;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <!-- Status indicator -->
+    <div id="status" class="connecting">
+      <span class="status-dot"></span>
+      <span id="status-text">Conectando...</span>
+    </div>
+
+    <!-- Remote video (doctor) - fullscreen -->
+    <div id="remote-video-container">
+      <div id="remote-placeholder">
+        <div class="avatar">M</div>
+        <div>Esperando al médico...</div>
+        <div class="spinner"></div>
+      </div>
+      <video id="remote-video" autoplay playsinline style="display: none;"></video>
+      <audio id="remote-audio" autoplay></audio>
+    </div>
+
+    <!-- Local video (patient) - small overlay -->
+    <div id="local-video-container">
+      <video id="local-video" autoplay playsinline muted></video>
+    </div>
+
+    <!-- Error message -->
+    <div id="error-message"></div>
+  </div>
+
+  <script>
+    // Configuration
+    const SERVER_URL = window.location.origin;
+
+    // Get room and identity from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomName = urlParams.get('room');
+    const identity = urlParams.get('identity') || 'paciente-' + Date.now();
+
+    // State
+    let room = null;
+    let localVideoTrack = null;
+    let currentFacingMode = 'user'; // 'user' = front camera, 'environment' = back camera
+
+    // DOM elements
+    const statusEl = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const localVideoEl = document.getElementById('local-video');
+    const remoteVideoEl = document.getElementById('remote-video');
+    const remoteAudioEl = document.getElementById('remote-audio');
+    const remotePlaceholder = document.getElementById('remote-placeholder');
+    const errorMessageEl = document.getElementById('error-message');
+
+    // Utility functions
+    function updateStatus(status, text) {
+      statusEl.className = status;
+      statusText.textContent = text;
+    }
+
+    function showError(message) {
+      console.error('Error:', message);
+      errorMessageEl.textContent = message;
+      errorMessageEl.style.display = 'block';
+      setTimeout(() => {
+        errorMessageEl.style.display = 'none';
+      }, 5000);
+    }
+
+    function sendMessageToReactNative(data) {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(data));
+      }
+    }
+
+    // Get video token from backend
+    async function getVideoToken() {
+      try {
+        console.log('Fetching token for room:', roomName, 'identity:', identity);
+
+        const response = await fetch(`${SERVER_URL}/token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            identity: identity,
+            room: roomName
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Token received successfully');
+        return data.token;
+      } catch (error) {
+        console.error('Error fetching token:', error);
+        throw error;
+      }
+    }
+
+    // Connect to Twilio Video room
+    async function connectToRoom() {
+      try {
+        updateStatus('connecting', 'Obteniendo token...');
+
+        // Get token from backend
+        const token = await getVideoToken();
+
+        updateStatus('connecting', 'Conectando a la sala...');
+        console.log('Connecting to room:', roomName);
+
+        // Connect to room using Twilio Video SDK
+        room = await Twilio.Video.connect(token, {
+          name: roomName,
+          audio: true,
+          video: {
+            width: 640,
+            height: 480,
+            facingMode: currentFacingMode
+          },
+          networkQuality: {
+            local: 1,
+            remote: 1
+          }
+        });
+
+        console.log('Successfully connected to room:', room.name);
+        updateStatus('connected', 'Conectado');
+
+        // Get local video track
+        const localVideoTrackPublication = Array.from(
+          room.localParticipant.videoTracks.values()
+        )[0];
+
+        if (localVideoTrackPublication) {
+          localVideoTrack = localVideoTrackPublication.track;
+          localVideoTrack.attach(localVideoEl);
+          console.log('Local video track attached');
+        }
+
+        // Handle existing remote participants
+        room.participants.forEach(participantConnected);
+
+        // Listen for new participants
+        room.on('participantConnected', participantConnected);
+        room.on('participantDisconnected', participantDisconnected);
+
+        // Listen for disconnection
+        room.on('disconnected', (room, error) => {
+          console.log('Disconnected from room:', error);
+          handleDisconnection();
+        });
+
+        // Notify React Native
+        sendMessageToReactNative({
+          type: 'ROOM_CONNECTED',
+          roomName: room.name,
+          participants: room.participants.size
+        });
+
+      } catch (error) {
+        console.error('Error connecting to room:', error);
+        updateStatus('error', 'Error de conexión');
+        showError('No se pudo conectar a la videollamada: ' + error.message);
+
+        sendMessageToReactNative({
+          type: 'ERROR',
+          error: error.message
+        });
+      }
+    }
+
+    // Handle participant connected
+    function participantConnected(participant) {
+      console.log('Participant connected:', participant.identity);
+
+      // Handle existing tracks
+      participant.tracks.forEach(publication => {
+        if (publication.isSubscribed && publication.track) {
+          trackSubscribed(publication.track);
+        }
+      });
+
+      // Listen for new tracks
+      participant.on('trackSubscribed', trackSubscribed);
+      participant.on('trackUnsubscribed', trackUnsubscribed);
+    }
+
+    // Handle participant disconnected
+    function participantDisconnected(participant) {
+      console.log('Participant disconnected:', participant.identity);
+
+      // Detach all tracks from this participant
+      participant.tracks.forEach(publication => {
+        if (publication.track) {
+          trackUnsubscribed(publication.track);
+        }
+      });
+
+      // Show placeholder if no participants
+      if (room.participants.size === 0) {
+        remoteVideoEl.style.display = 'none';
+        remotePlaceholder.style.display = 'flex';
+      }
+    }
+
+    // Handle track subscribed
+    function trackSubscribed(track) {
+      console.log('Track subscribed:', track.kind, track.sid);
+
+      if (track.kind === 'video') {
+        // Attach video track
+        track.attach(remoteVideoEl);
+        remoteVideoEl.style.display = 'block';
+        remotePlaceholder.style.display = 'none';
+        console.log('Remote video track attached');
+      } else if (track.kind === 'audio') {
+        // Attach audio track
+        track.attach(remoteAudioEl);
+        console.log('Remote audio track attached');
+      }
+    }
+
+    // Handle track unsubscribed
+    function trackUnsubscribed(track) {
+      console.log('Track unsubscribed:', track.kind, track.sid);
+
+      if (track.kind === 'video') {
+        track.detach().forEach(el => el.remove());
+        remoteVideoEl.style.display = 'none';
+        remotePlaceholder.style.display = 'flex';
+      } else if (track.kind === 'audio') {
+        track.detach().forEach(el => el.remove());
+      }
+    }
+
+    // Flip camera
+    async function flipCamera() {
+      try {
+        console.log('Flipping camera...');
+
+        // Toggle facing mode
+        currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+
+        // Stop current video track
+        if (localVideoTrack) {
+          localVideoTrack.stop();
+        }
+
+        // Create new video track with opposite facing mode
+        const newTrack = await Twilio.Video.createLocalVideoTrack({
+          facingMode: currentFacingMode,
+          width: 640,
+          height: 480
+        });
+
+        // Get current video publication
+        const localVideoPublication = Array.from(
+          room.localParticipant.videoTracks.values()
+        )[0];
+
+        if (localVideoPublication) {
+          // Unpublish old track
+          await room.localParticipant.unpublishTrack(localVideoPublication.track);
+
+          // Publish new track
+          await room.localParticipant.publishTrack(newTrack);
+        }
+
+        // Update local reference and attach to video element
+        localVideoTrack = newTrack;
+        localVideoTrack.attach(localVideoEl);
+
+        console.log('Camera flipped successfully');
+      } catch (error) {
+        console.error('Error flipping camera:', error);
+        showError('No se pudo cambiar la cámara');
+      }
+    }
+
+    // Toggle audio
+    function toggleAudio(enabled) {
+      if (room && room.localParticipant) {
+        room.localParticipant.audioTracks.forEach(publication => {
+          if (enabled) {
+            publication.track.enable();
+          } else {
+            publication.track.disable();
+          }
+        });
+        console.log('Audio', enabled ? 'enabled' : 'disabled');
+      }
+    }
+
+    // Disconnect from room
+    function disconnect() {
+      console.log('Disconnecting from room...');
+
+      if (room) {
+        // Detach all local tracks
+        room.localParticipant.videoTracks.forEach(publication => {
+          publication.track.detach().forEach(el => el.remove());
+          publication.track.stop();
+        });
+
+        room.localParticipant.audioTracks.forEach(publication => {
+          publication.track.stop();
+        });
+
+        // Detach all remote tracks
+        room.participants.forEach(participant => {
+          participant.tracks.forEach(publication => {
+            if (publication.track) {
+              publication.track.detach().forEach(el => el.remove());
+            }
+          });
+        });
+
+        // Disconnect
+        room.disconnect();
+        room = null;
+      }
+
+      handleDisconnection();
+    }
+
+    // Handle disconnection
+    function handleDisconnection() {
+      updateStatus('connecting', 'Desconectado');
+      remoteVideoEl.style.display = 'none';
+      remotePlaceholder.style.display = 'flex';
+
+      sendMessageToReactNative({
+        type: 'ROOM_DISCONNECTED'
+      });
+    }
+
+    // Listen for messages from React Native
+    window.addEventListener('message', (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('Message from React Native:', message);
+
+        switch (message.type) {
+          case 'FLIP_CAMERA':
+            flipCamera();
+            break;
+          case 'TOGGLE_AUDIO':
+            toggleAudio(message.enabled);
+            break;
+          case 'HANGUP':
+            disconnect();
+            break;
+        }
+      } catch (error) {
+        console.error('Error handling message:', error);
+      }
+    });
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (room) {
+        // Use sendBeacon for guaranteed delivery
+        const url = `${SERVER_URL}/api/video/events/participant-disconnected`;
+        const data = JSON.stringify({ roomName, identity });
+        navigator.sendBeacon(url, new Blob([data], { type: 'application/json' }));
+
+        disconnect();
+      }
+    });
+
+    // Auto-connect when page loads
+    if (roomName) {
+      console.log('Auto-connecting to room:', roomName);
+      connectToRoom();
+    } else {
+      updateStatus('error', 'Error: No se especificó sala');
+      showError('No se especificó el nombre de la sala');
+    }
+  </script>
+</body>
+</html>

@@ -222,6 +222,14 @@
     const remotePlaceholder = document.getElementById('remote-placeholder');
     const errorMessageEl = document.getElementById('error-message');
 
+    // Debug: verify elements exist
+    console.log('DOM Elements:', {
+      localVideo: localVideoEl,
+      remoteVideo: remoteVideoEl,
+      remoteAudio: remoteAudioEl,
+      placeholder: remotePlaceholder
+    });
+
     // Utility functions
     function updateStatus(status, text) {
       statusEl.className = status;
@@ -383,15 +391,31 @@
       console.log('Track subscribed:', track.kind, track.sid);
 
       if (track.kind === 'video') {
-        // Attach video track
-        track.attach(remoteVideoEl);
+        // Attach video track - returns the attached element
+        const attachedElements = track.attach(remoteVideoEl);
+        console.log('Video attached, elements:', attachedElements);
+
+        // Make sure video is visible
         remoteVideoEl.style.display = 'block';
         remotePlaceholder.style.display = 'none';
-        console.log('Remote video track attached');
+
+        // Force video to play
+        remoteVideoEl.play().catch(err => {
+          console.error('Error playing remote video:', err);
+        });
+
+        console.log('Remote video track attached successfully');
       } else if (track.kind === 'audio') {
         // Attach audio track
-        track.attach(remoteAudioEl);
-        console.log('Remote audio track attached');
+        const attachedElements = track.attach(remoteAudioEl);
+        console.log('Audio attached, elements:', attachedElements);
+
+        // Force audio to play
+        remoteAudioEl.play().catch(err => {
+          console.error('Error playing remote audio:', err);
+        });
+
+        console.log('Remote audio track attached successfully');
       }
     }
 

@@ -54,9 +54,6 @@ const apiKeySecret = process.env.TWILIO_API_KEY_SECRET || 'YOUR_API_KEY_SECRET';
 const AccessToken = twilio.jwt.AccessToken;
 const VideoGrant = AccessToken.VideoGrant;
 
-// Cliente de Twilio para crear salas
-const twilioClient = twilio(accountSid, authToken);
-
 // ============================================
 // ESTRUCTURAS DE DATOS OPTIMIZADAS
 // ============================================
@@ -482,20 +479,8 @@ app.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
-    // Crear sala group (único tipo disponible para cuentas nuevas desde Oct 2024)
-    try {
-      await twilioClient.video.v1.rooms.create({
-        uniqueName: sanitizedRoom,
-        type: 'group',
-        maxParticipants: 2
-      });
-      console.log('Sala group creada:', sanitizedRoom);
-    } catch (e) {
-      // Error 53113 = sala ya existe, está bien
-      if (e.code !== 53113) {
-        console.log('Error creando sala (puede que ya exista):', e.code, e.message);
-      }
-    }
+    // No crear sala explícitamente - Twilio la crea automáticamente como Group Room
+    // cuando el primer participante se conecta
 
     const token = new AccessToken(
       accountSid,

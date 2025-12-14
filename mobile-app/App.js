@@ -497,11 +497,8 @@ export default function App() {
           enableAudio: true,
           enableVideo: true,
           encodingParameters: {
-            enableH264Codec: true,
-            audioBitrate: 16,
-            videoBitrate: 400
-          },
-          enableNetworkQualityReporting: true
+            enableH264Codec: true
+          }
         });
         console.log('twilioRef.connect() llamado exitosamente');
       } else {

@@ -479,25 +479,10 @@ app.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
-    // Crear sala como group-small ANTES de generar el token
-    // group-small es optimizada para 2-4 participantes y funciona mejor
-    // con react-native-twilio-video-webrtc que peer-to-peer
-    const twilioClient = twilio(accountSid, authToken);
-    try {
-      await twilioClient.video.v1.rooms.create({
-        uniqueName: sanitizedRoom,
-        type: 'group-small',
-        maxParticipants: 2
-      });
-      console.log(`Sala group-small creada: ${sanitizedRoom}`);
-    } catch (error) {
-      // Si ya existe (error 53113), continuar
-      if (error.code === 53113) {
-        console.log(`Sala ya existe: ${sanitizedRoom}`);
-      } else {
-        console.error('Error creando sala:', error);
-      }
-    }
+    // NO crear sala manualmente - dejar que Twilio la cree automáticamente
+    // Twilio creará la sala cuando el primer participante se conecte
+    // Esto evita errores con tipos de sala legacy (53126)
+    console.log(`Token será generado para sala: ${sanitizedRoom}`);
 
     const token = new AccessToken(
       accountSid,

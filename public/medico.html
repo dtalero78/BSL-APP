@@ -298,8 +298,28 @@
         const room = await Twilio.Video.connect(data.token, {
           name: roomName,
           audio: true,
-          video: { width: 640, height: 480 },
-          networkQuality: { local: 1, remote: 1 }
+          video: {
+            width: 640,
+            height: 480,
+            frameRate: 24
+          },
+          preferredVideoCodecs: ['H264'],
+          bandwidthProfile: {
+            video: {
+              mode: 'collaboration',
+              maxSubscriptionBitrate: 2500000,
+              dominantSpeakerPriority: 'high',
+              renderDimensions: {
+                high: { width: 640, height: 480 },
+                standard: { width: 320, height: 240 },
+                low: { width: 160, height: 120 }
+              }
+            }
+          },
+          networkQuality: {
+            local: 1,
+            remote: 1
+          }
         });
 
         currentRoom = room;

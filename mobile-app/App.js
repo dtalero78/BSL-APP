@@ -496,7 +496,12 @@ export default function App() {
           accessToken: data.token,
           enableAudio: true,
           enableVideo: true,
-          enableAutomaticSubscription: true
+          encodingParameters: {
+            enableH264Codec: true,
+            audioBitrate: 16,
+            videoBitrate: 400
+          },
+          enableNetworkQualityReporting: true
         });
         console.log('twilioRef.connect() llamado exitosamente');
       } else {

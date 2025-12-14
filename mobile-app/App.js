@@ -495,11 +495,7 @@ export default function App() {
           roomName: roomName,
           accessToken: data.token,
           enableAudio: true,
-          enableVideo: true,
-          dominantSpeakerEnabled: true,
-          encodingParameters: {
-            enableH264Codec: true
-          }
+          enableVideo: true
         });
         console.log('twilioRef.connect() llamado exitosamente');
       } else {
@@ -1128,13 +1124,6 @@ export default function App() {
         onParticipantEnabledVideoTrack={onParticipantEnabledVideoTrack}
         onParticipantDisabledVideoTrack={onParticipantDisabledVideoTrack}
       />
-
-      {/* TwilioVideoLocalView oculto - necesario para inicializar cámara antes de conectar */}
-      {!inCall && (
-        <View style={{ width: 1, height: 1, opacity: 0, position: 'absolute' }}>
-          <TwilioVideoLocalView enabled={true} style={{ width: 1, height: 1 }} />
-        </View>
-      )}
     </View>
   );
 }

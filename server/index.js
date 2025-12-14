@@ -479,8 +479,23 @@ app.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
-    // No crear sala explícitamente - Twilio la crea automáticamente como Group Room
-    // cuando el primer participante se conecta
+    // CLAVE: Crear sala como peer-to-peer ANTES de generar el token
+    // Esto garantiza conexión directa más rápida y estable
+    const twilioClient = twilio(accountSid, authToken);
+    try {
+      await twilioClient.video.v1.rooms.create({
+        uniqueName: sanitizedRoom,
+        type: 'peer-to-peer'
+      });
+      console.log(`Sala peer-to-peer creada: ${sanitizedRoom}`);
+    } catch (error) {
+      // Si ya existe (error 53113), continuar
+      if (error.code === 53113) {
+        console.log(`Sala ya existe: ${sanitizedRoom}`);
+      } else {
+        console.error('Error creando sala:', error);
+      }
+    }
 
     const token = new AccessToken(
       accountSid,

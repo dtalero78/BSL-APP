@@ -466,7 +466,9 @@ export default function App() {
 
   const startVideoCall = async (roomName) => {
     try {
-      console.log('Solicitando token de Twilio...');
+      console.log('=== INICIANDO VIDEO CALL ===');
+      console.log('Room name:', roomName);
+      console.log('twilioRef.current existe:', !!twilioRef.current);
 
       const response = await fetch(`${config.SERVER_URL}/token`, {
         method: 'POST',
@@ -484,9 +486,11 @@ export default function App() {
       }
 
       const data = await response.json();
-      console.log('Token recibido, conectando a sala:', roomName);
+      console.log('Token recibido correctamente');
+      console.log('Sala a conectar:', data.room);
 
       if (twilioRef.current) {
+        console.log('Llamando a twilioRef.connect()...');
         twilioRef.current.connect({
           roomName: roomName,
           accessToken: data.token,
@@ -494,6 +498,10 @@ export default function App() {
           enableVideo: true,
           enableAutomaticSubscription: true
         });
+        console.log('twilioRef.connect() llamado exitosamente');
+      } else {
+        console.error('ERROR: twilioRef.current es null');
+        Alert.alert('Error', 'Componente de video no disponible');
       }
 
     } catch (error) {
@@ -555,7 +563,7 @@ export default function App() {
   };
 
   // Eventos de Twilio Video
-  const onRoomDidConnect = ({ roomName, error }) => {
+  const onRoomDidConnect = ({ roomName, error, localParticipant, participants }) => {
     if (error) {
       console.error('Error conectando a sala:', error);
       Alert.alert('Error', 'No se pudo conectar a la videollamada');
@@ -563,28 +571,40 @@ export default function App() {
       return;
     }
 
-    console.log('Conectado a sala:', roomName);
+    console.log('=== TWILIO: Conectado a sala ===');
+    console.log('Room name:', roomName);
+    console.log('Local participant:', JSON.stringify(localParticipant));
+    console.log('Remote participants:', JSON.stringify(participants));
+    console.log('Estado actual - inCall:', inCall, 'calling:', calling);
+
     setInCall(true);
     setCalling(false);
     setStatusMessage('En llamada con el médico');
+
+    console.log('=== Estados actualizados ===');
   };
 
   const onRoomDidDisconnect = ({ roomName, error }) => {
-    console.log('Desconectado de sala:', roomName);
-    if (error) {
-      console.error('Error al desconectar:', error);
-    }
+    console.log('=== TWILIO: Desconectado de sala ===');
+    console.log('Room name:', roomName);
+    console.log('Error:', error ? JSON.stringify(error) : 'ninguno');
+    console.log('Estado antes - inCall:', inCall, 'calling:', calling);
+
     setInCall(false);
     setCalling(false);
     setVideoTracks(new Map());
     setQueuePosition(null);
     setCurrentScreen('home');
     setStatusMessage('Llamada finalizada');
+
+    console.log('=== Desconexión procesada ===');
   };
 
   const onRoomDidFailToConnect = ({ roomName, error }) => {
-    console.error('Fallo al conectar a sala:', error);
-    Alert.alert('Error de Conexión', 'No se pudo conectar a la videollamada: ' + error);
+    console.log('=== TWILIO: Fallo al conectar ===');
+    console.log('Room name:', roomName);
+    console.log('Error:', error ? JSON.stringify(error) : 'desconocido');
+    Alert.alert('Error de Conexión', 'No se pudo conectar a la videollamada: ' + (error || 'Error desconocido'));
     setInCall(false);
     setCalling(false);
     setCurrentScreen('home');

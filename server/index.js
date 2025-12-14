@@ -4,6 +4,7 @@ const http = require('http');
 const socketIO = require('socket.io');
 const twilio = require('twilio');
 const cors = require('cors');
+const path = require('path');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const { Expo } = require('expo-server-sdk');
@@ -33,7 +34,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // PostgreSQL config
 const pool = new Pool({

@@ -482,14 +482,14 @@ app.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
-    // Crear sala peer-to-peer (más rápido para 2 participantes)
+    // Crear sala go (group-small) - el tipo más eficiente disponible
     try {
       await twilioClient.video.v1.rooms.create({
         uniqueName: sanitizedRoom,
-        type: 'peer-to-peer',
+        type: 'go',
         maxParticipants: 2
       });
-      console.log('Sala peer-to-peer creada:', sanitizedRoom);
+      console.log('Sala go creada:', sanitizedRoom);
     } catch (e) {
       // Error 53113 = sala ya existe, está bien
       if (e.code !== 53113) {

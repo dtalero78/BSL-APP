@@ -333,15 +333,27 @@
     function participantConnected(participant) {
       console.log('Participante conectado:', participant.identity);
 
-      // Escuchar nuevos tracks que se suscriban
-      participant.on('trackSubscribed', attachTrack);
-      participant.on('trackUnsubscribed', detachTrack);
-
-      // Manejar tracks ya suscritos
+      // Manejar tracks ya publicados
       participant.tracks.forEach(publication => {
         if (publication.isSubscribed && publication.track) {
           attachTrack(publication.track);
         }
+        // También escuchar cuando el track se suscriba
+        publication.on('subscribed', attachTrack);
+        publication.on('unsubscribed', detachTrack);
+      });
+
+      // Escuchar nuevos tracks que se suscriban
+      participant.on('trackSubscribed', attachTrack);
+      participant.on('trackUnsubscribed', detachTrack);
+
+      // También escuchar cuando se publican nuevos tracks
+      participant.on('trackPublished', publication => {
+        console.log('Track publicado:', publication.trackName);
+        if (publication.isSubscribed && publication.track) {
+          attachTrack(publication.track);
+        }
+        publication.on('subscribed', attachTrack);
       });
     }
 

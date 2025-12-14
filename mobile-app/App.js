@@ -584,6 +584,19 @@ export default function App() {
     setCalling(false);
     setStatusMessage('En llamada con el médico');
 
+    // Forzar habilitación de video después de conectar para asegurar publicación
+    // Esto resuelve el problema de timing donde el track llega muted
+    setTimeout(() => {
+      if (twilioRef.current) {
+        console.log('Re-habilitando video después de conectar...');
+        twilioRef.current.setLocalVideoEnabled(false);
+        setTimeout(() => {
+          twilioRef.current.setLocalVideoEnabled(true);
+          console.log('Video re-habilitado');
+        }, 100);
+      }
+    }, 1000);
+
     console.log('=== Estados actualizados ===');
   };
 

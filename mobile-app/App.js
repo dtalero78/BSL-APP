@@ -490,6 +490,10 @@ export default function App() {
       console.log('Sala a conectar:', data.room);
 
       if (twilioRef.current) {
+        // Pequeño delay para asegurar que la cámara esté completamente inicializada
+        // Esto evita que el track llegue "muted" al médico
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         console.log('Llamando a twilioRef.connect()...');
         twilioRef.current.connect({
           roomName: roomName,

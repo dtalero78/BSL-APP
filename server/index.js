@@ -479,15 +479,17 @@ app.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
-    // CLAVE: Crear sala como peer-to-peer ANTES de generar el token
-    // Esto garantiza conexión directa más rápida y estable
+    // Crear sala como group-small ANTES de generar el token
+    // group-small es optimizada para 2-4 participantes y funciona mejor
+    // con react-native-twilio-video-webrtc que peer-to-peer
     const twilioClient = twilio(accountSid, authToken);
     try {
       await twilioClient.video.v1.rooms.create({
         uniqueName: sanitizedRoom,
-        type: 'peer-to-peer'
+        type: 'group-small',
+        maxParticipants: 2
       });
-      console.log(`Sala peer-to-peer creada: ${sanitizedRoom}`);
+      console.log(`Sala group-small creada: ${sanitizedRoom}`);
     } catch (error) {
       // Si ya existe (error 53113), continuar
       if (error.code === 53113) {

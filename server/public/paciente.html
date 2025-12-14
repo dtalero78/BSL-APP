@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paciente - Llamar Médico</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      text-align: center;
+      color: white;
+    }
+    h1 {
+      font-size: 32px;
+      margin-bottom: 20px;
+    }
+    .call-button {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: #28a745;
+      border: 8px solid rgba(255,255,255,0.3);
+      color: white;
+      font-size: 80px;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 30px;
+    }
+    .call-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+    }
+    .call-button:active {
+      transform: scale(0.95);
+    }
+    .call-button.calling {
+      animation: pulse 1.5s infinite;
+      background: #ffc107;
+      pointer-events: none;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    .status-message {
+      font-size: 24px;
+      margin-top: 20px;
+      min-height: 30px;
+    }
+    #video-container {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 1000;
+    }
+    #remote-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #local-video {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 120px;
+      height: 160px;
+      border-radius: 10px;
+      object-fit: cover;
+      border: 3px solid white;
+    }
+    .end-call {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #dc3545;
+      color: white;
+      padding: 15px 40px;
+      border: none;
+      border-radius: 50px;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .end-call:hover {
+      background: #c82333;
+    }
+    @media (max-width: 768px) {
+      #local-video {
+        width: 100px;
+        height: 133px;
+        bottom: 100px;
+        right: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏥 Atención Médica</h1>
+    <button class="call-button" id="callButton" onclick="llamarMedico()">
+      📞
+    </button>
+    <div class="status-message" id="statusMessage">
+      Presiona el botón para llamar al médico
+    </div>
+  </div>
+
+  <div id="video-container">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay muted playsinline></video>
+    <button class="end-call" onclick="endCall()">Finalizar Llamada</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://sdk.twilio.com/js/video/releases/2.27.0/twilio-video.min.js"></script>
+  <script>
+    const socket = io();
+    let currentRoom = null;
+    let waiting = false;
+
+    socket.on('connect', () => {
+      console.log('Conectado al servidor');
+    });
+
+    socket.on('medico-no-disponible', () => {
+      document.getElementById('statusMessage').textContent = 'Médico no disponible. Intenta más tarde.';
+      document.getElementById('callButton').classList.remove('calling');
+      waiting = false;
+    });
+
+    socket.on('medico-aceptado', async (data) => {
+      console.log('Médico aceptó la llamada');
+      document.getElementById('statusMessage').textContent = 'Conectando con el médico...';
+      await startVideo(data.roomName, 'paciente');
+    });
+
+    function llamarMedico() {
+      if (waiting) return;
+
+      waiting = true;
+      const callButton = document.getElementById('callButton');
+      callButton.classList.add('calling');
+      document.getElementById('statusMessage').textContent = 'Llamando al médico...';
+
+      socket.emit('llamar-medico', {
+        nombre: 'Paciente'
+      });
+    }
+
+    async function startVideo(roomName, identity) {
+      try {
+        const response = await fetch('/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identity, room: roomName })
+        });
+
+        const data = await response.json();
+
+        const room = await Twilio.Video.connect(data.token, {
+          name: roomName,
+          audio: true,
+          video: { width: 640 }
+        });
+
+        currentRoom = room;
+
+        document.querySelector('.container').style.display = 'none';
+        document.getElementById('video-container').style.display = 'block';
+
+        // Local video
+        const localVideo = document.getElementById('local-video');
+        room.localParticipant.videoTracks.forEach(publication => {
+          localVideo.srcObject = new MediaStream([publication.track.mediaStreamTrack]);
+        });
+
+        // Remote video
+        room.participants.forEach(participantConnected);
+        room.on('participantConnected', participantConnected);
+        room.on('participantDisconnected', () => {
+          alert('El médico finalizó la llamada');
+          endCall();
+        });
+
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Error al conectar video: ' + error.message);
+        resetUI();
+      }
+    }
+
+    function participantConnected(participant) {
+      console.log('Participante conectado:', participant.identity);
+
+      participant.tracks.forEach(publication => {
+        if (publication.track) {
+          attachTrack(publication.track);
+        }
+      });
+
+      participant.on('trackSubscribed', attachTrack);
+    }
+
+    function attachTrack(track) {
+      if (track.kind === 'video') {
+        const remoteVideo = document.getElementById('remote-video');
+        remoteVideo.srcObject = new MediaStream([track.mediaStreamTrack]);
+      }
+    }
+
+    function endCall() {
+      if (currentRoom) {
+        currentRoom.disconnect();
+        currentRoom = null;
+      }
+      resetUI();
+    }
+
+    function resetUI() {
+      document.getElementById('video-container').style.display = 'none';
+      document.querySelector('.container').style.display = 'block';
+      document.getElementById('callButton').classList.remove('calling');
+      document.getElementById('statusMessage').textContent = 'Presiona el botón para llamar al médico';
+      waiting = false;
+    }
+  </script>
+</body>
+</html>

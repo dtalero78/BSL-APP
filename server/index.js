@@ -482,14 +482,14 @@ app.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
 
-    // Crear sala go (group-small) - el tipo más eficiente disponible
+    // Crear sala group (único tipo disponible para cuentas nuevas desde Oct 2024)
     try {
       await twilioClient.video.v1.rooms.create({
         uniqueName: sanitizedRoom,
-        type: 'go',
+        type: 'group',
         maxParticipants: 2
       });
-      console.log('Sala go creada:', sanitizedRoom);
+      console.log('Sala group creada:', sanitizedRoom);
     } catch (e) {
       // Error 53113 = sala ya existe, está bien
       if (e.code !== 53113) {

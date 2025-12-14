@@ -939,6 +939,15 @@ export default function App() {
           javaScriptEnabled={true}
           domStorageEnabled={true}
           mediaCapture="camera,microphone"
+          allowsProtectedMedia={true}
+          startInLoadingState={true}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('WebView error:', nativeEvent);
+          }}
+          onLoadEnd={() => {
+            console.log('WebView cargado completamente');
+          }}
           style={styles.webView}
         />
 

@@ -358,14 +358,25 @@
 
       // Handle existing tracks
       participant.tracks.forEach(publication => {
+        console.log('Existing publication:', publication.trackName, 'subscribed:', publication.isSubscribed);
         if (publication.isSubscribed && publication.track) {
           trackSubscribed(publication.track);
         }
       });
 
-      // Listen for new tracks
+      // Listen for track events - CRITICAL for proper video sync
       participant.on('trackSubscribed', trackSubscribed);
       participant.on('trackUnsubscribed', trackUnsubscribed);
+
+      // También escuchar cuando se publican nuevos tracks (esto faltaba!)
+      participant.on('trackPublished', publication => {
+        console.log('Track publicado:', publication.trackName, 'subscribed:', publication.isSubscribed);
+        if (publication.isSubscribed && publication.track) {
+          trackSubscribed(publication.track);
+        }
+        // Escuchar cuando el track se suscriba
+        publication.on('subscribed', trackSubscribed);
+      });
     }
 
     // Handle participant disconnected

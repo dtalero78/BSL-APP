@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bsl.paciente",
-      "buildNumber": "33",
+      "buildNumber": "34",
       "infoPlist": {
         "NSCameraUsageDescription": "La app necesita acceso a la cámara para las videollamadas con el médico.",
         "NSMicrophoneUsageDescription": "La app necesita acceso al micrófono para las videollamadas con el médico.",

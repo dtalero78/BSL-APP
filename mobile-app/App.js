@@ -122,9 +122,6 @@ export default function App() {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
-      if (twilioRef.current) {
-        twilioRef.current.disconnect();
-      }
       if (notificationListener.current) {
         Notifications.removeNotificationSubscription(notificationListener.current);
       }
@@ -461,14 +458,33 @@ export default function App() {
   // WebView se conecta automáticamente, esta función ya no es necesaria
   // pero la mantenemos para compatibilidad con el flujo existente
   const startVideoCall = async (roomName) => {
-    console.log('=== INICIANDO VIDEO CALL CON WEBVIEW ===');
+    console.log('=== INICIANDO VIDEO CALL EN NAVEGADOR ===');
     console.log('Room name:', roomName);
     roomNameRef.current = roomName;
 
-    // El WebView manejará la conexión automáticamente
-    setInCall(true);
-    setCalling(false);
-    setStatusMessage('Conectando...');
+    // Generar identity único para el paciente
+    const identity = 'paciente-' + Date.now();
+
+    // Abrir la videollamada en el navegador del dispositivo
+    const videoUrl = `${config.SERVER_URL}/paciente-mobile.html?room=${roomName}&identity=${identity}`;
+    console.log('Abriendo URL:', videoUrl);
+
+    try {
+      await Linking.openURL(videoUrl);
+      // Actualizar estado en la app
+      setCalling(false);
+      setStatusMessage('Videollamada abierta en navegador');
+      // Mostrar instrucciones al usuario
+      Alert.alert(
+        'Videollamada Iniciada',
+        'La videollamada se ha abierto en tu navegador. Cuando termines, regresa a esta app.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error abriendo navegador:', error);
+      Alert.alert('Error', 'No se pudo abrir el navegador');
+      setCalling(false);
+    }
   };
 
   const endCall = () => {

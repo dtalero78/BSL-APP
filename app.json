@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "46d8adda-9eb7-46f3-9da4-15229cc566e2"
+      }
+    },
+    "android": {
+      "package": "com.bsl.paciente"
+    }
+  }
+}

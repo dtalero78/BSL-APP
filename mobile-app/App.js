@@ -77,11 +77,16 @@ export default function App() {
     numeroId: '',
     celular: '',
     tipoConsulta: 'Ocupacional',
-    mes: '',
-    dia: '',
+    modalidad: 'virtual',
+    fecha: '',
     hora: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estado para turnos disponibles
+  const [turnosDisponibles, setTurnosDisponibles] = useState([]);
+  const [loadingTurnos, setLoadingTurnos] = useState(false);
+  const [fechasProximas, setFechasProximas] = useState([]);
 
   // Estado para descargar certificado
   const [certificadoNumeroId, setCertificadoNumeroId] = useState('');
@@ -339,6 +344,19 @@ export default function App() {
   };
 
   const handleAgendarConsulta = () => {
+    // Generar próximos 14 días
+    const proximos = [];
+    const hoy = new Date();
+    for (let i = 0; i < 14; i++) {
+      const fecha = new Date(hoy);
+      fecha.setDate(hoy.getDate() + i);
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const diaSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][fecha.getDay()];
+      const diaNum = fecha.getDate();
+      const mes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][fecha.getMonth()];
+      proximos.push({ fecha: fechaStr, diaSemana, diaNum, mes });
+    }
+    setFechasProximas(proximos);
     setCurrentScreen('agendar');
   };
 
@@ -346,10 +364,55 @@ export default function App() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Cargar turnos disponibles cuando cambia fecha o modalidad
+  const cargarTurnosDisponibles = async (fecha, modalidad) => {
+    if (!fecha) return;
+
+    setLoadingTurnos(true);
+    setTurnosDisponibles([]);
+
+    try {
+      const response = await fetch(
+        `${config.PLATAFORMA_URL}/api/turnos-disponibles?fecha=${fecha}&modalidad=${modalidad}`
+      );
+      const data = await response.json();
+
+      if (data.success && data.turnos) {
+        // Filtrar solo horas con médicos disponibles
+        const horasDisponibles = data.turnos
+          .filter(t => t.medicosDisponibles > 0)
+          .map(t => t.hora);
+        setTurnosDisponibles(horasDisponibles);
+      } else {
+        setTurnosDisponibles([]);
+      }
+    } catch (error) {
+      console.error('Error cargando turnos:', error);
+      setTurnosDisponibles([]);
+    } finally {
+      setLoadingTurnos(false);
+    }
+  };
+
+  // Cuando cambia fecha o modalidad, cargar turnos
+  const handleFechaChange = (fecha) => {
+    updateFormField('fecha', fecha);
+    updateFormField('hora', ''); // Reset hora al cambiar fecha
+    cargarTurnosDisponibles(fecha, formData.modalidad);
+  };
+
+  const handleModalidadChange = (modalidad) => {
+    updateFormField('modalidad', modalidad);
+    updateFormField('hora', ''); // Reset hora al cambiar modalidad
+    if (formData.fecha) {
+      cargarTurnosDisponibles(formData.fecha, modalidad);
+    }
+  };
+
   const submitAgendarConsulta = async () => {
     // Validar campos requeridos
     if (!formData.primerNombre || !formData.primerApellido || !formData.numeroId ||
-        !formData.celular || !formData.mes || !formData.dia || !formData.hora) {
+        !formData.celular || !formData.fecha || !formData.hora) {
       Alert.alert('Campos Requeridos', 'Por favor complete todos los campos obligatorios.');
       return;
     }
@@ -357,18 +420,34 @@ export default function App() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${config.SERVER_URL}/agendar-consulta`, {
+      // Usar endpoint de BSL-PLATAFORMA para crear orden con asignación automática
+      const response = await fetch(`${config.PLATAFORMA_URL}/api/ordenes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          primerNombre: formData.primerNombre,
+          segundoNombre: formData.segundoNombre,
+          primerApellido: formData.primerApellido,
+          segundoApellido: formData.segundoApellido,
+          numeroId: formData.numeroId,
+          celular: formData.celular,
+          tipoExamen: formData.tipoConsulta,
+          modalidad: formData.modalidad,
+          fechaAtencion: formData.fecha,
+          horaAtencion: formData.hora,
+          asignarMedicoAuto: true // Asignación automática de médico
+        })
       });
 
       const data = await response.json();
 
       if (data.success) {
+        const fechaFormateada = new Date(formData.fecha).toLocaleDateString('es-CO', {
+          weekday: 'long', day: 'numeric', month: 'long'
+        });
         Alert.alert(
           'Consulta Agendada',
-          `Su consulta ha sido agendada exitosamente para el ${formData.dia}/${formData.mes} a las ${formData.hora}.`,
+          `Su consulta ${formData.modalidad} ha sido agendada para el ${fechaFormateada} a las ${formData.hora}.${data.medico ? `\n\nMédico asignado: ${data.medico}` : ''}`,
           [{ text: 'OK', onPress: () => {
             setCurrentScreen('home');
             setFormData({
@@ -379,10 +458,11 @@ export default function App() {
               numeroId: '',
               celular: '',
               tipoConsulta: 'Ocupacional',
-              mes: '',
-              dia: '',
+              modalidad: 'virtual',
+              fecha: '',
               hora: ''
             });
+            setTurnosDisponibles([]);
           }}]
         );
       } else {
@@ -828,45 +908,106 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.formSectionTitle}>Fecha y Hora</Text>
+          <Text style={styles.formSectionTitle}>Modalidad</Text>
 
-          <View style={styles.inputRow}>
-            <View style={styles.inputThird}>
-              <Text style={styles.inputLabel}>Mes *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.mes}
-                onChangeText={(v) => updateFormField('mes', v)}
-                placeholder="MM"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-                maxLength={2}
-              />
-            </View>
-            <View style={styles.inputThird}>
-              <Text style={styles.inputLabel}>Día *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.dia}
-                onChangeText={(v) => updateFormField('dia', v)}
-                placeholder="DD"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-                maxLength={2}
-              />
-            </View>
-            <View style={styles.inputThird}>
-              <Text style={styles.inputLabel}>Hora *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.hora}
-                onChangeText={(v) => updateFormField('hora', v)}
-                placeholder="HH:MM"
-                placeholderTextColor="#999"
-                maxLength={5}
-              />
-            </View>
+          <View style={styles.tipoConsultaRow}>
+            <TouchableOpacity
+              style={[
+                styles.tipoConsultaBtn,
+                formData.modalidad === 'virtual' && styles.tipoConsultaBtnActive
+              ]}
+              onPress={() => handleModalidadChange('virtual')}
+            >
+              <Text style={[
+                styles.tipoConsultaText,
+                formData.modalidad === 'virtual' && styles.tipoConsultaTextActive
+              ]}>🖥️ Virtual</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tipoConsultaBtn,
+                formData.modalidad === 'presencial' && styles.tipoConsultaBtnActive
+              ]}
+              onPress={() => handleModalidadChange('presencial')}
+            >
+              <Text style={[
+                styles.tipoConsultaText,
+                formData.modalidad === 'presencial' && styles.tipoConsultaTextActive
+              ]}>🏥 Presencial</Text>
+            </TouchableOpacity>
           </View>
+
+          <Text style={styles.formSectionTitle}>Selecciona una Fecha *</Text>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.fechasScroll}
+          >
+            {fechasProximas.map((item) => (
+              <TouchableOpacity
+                key={item.fecha}
+                style={[
+                  styles.fechaCard,
+                  formData.fecha === item.fecha && styles.fechaCardActive
+                ]}
+                onPress={() => handleFechaChange(item.fecha)}
+              >
+                <Text style={[
+                  styles.fechaDiaSemana,
+                  formData.fecha === item.fecha && styles.fechaTextActive
+                ]}>{item.diaSemana}</Text>
+                <Text style={[
+                  styles.fechaDiaNum,
+                  formData.fecha === item.fecha && styles.fechaTextActive
+                ]}>{item.diaNum}</Text>
+                <Text style={[
+                  styles.fechaMes,
+                  formData.fecha === item.fecha && styles.fechaTextActive
+                ]}>{item.mes}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {formData.fecha && (
+            <>
+              <Text style={styles.formSectionTitle}>Selecciona una Hora *</Text>
+
+              {loadingTurnos ? (
+                <View style={styles.loadingTurnos}>
+                  <ActivityIndicator color={colors.greenHaze} />
+                  <Text style={styles.loadingTurnosText}>Cargando horarios disponibles...</Text>
+                </View>
+              ) : turnosDisponibles.length > 0 ? (
+                <View style={styles.horasGrid}>
+                  {turnosDisponibles.map((hora) => (
+                    <TouchableOpacity
+                      key={hora}
+                      style={[
+                        styles.horaCard,
+                        formData.hora === hora && styles.horaCardActive
+                      ]}
+                      onPress={() => updateFormField('hora', hora)}
+                    >
+                      <Text style={[
+                        styles.horaText,
+                        formData.hora === hora && styles.horaTextActive
+                      ]}>{hora}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.noTurnos}>
+                  <Text style={styles.noTurnosText}>
+                    No hay turnos disponibles para esta fecha y modalidad.
+                  </Text>
+                  <Text style={styles.noTurnosSubtext}>
+                    Por favor selecciona otra fecha.
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
 
           <TouchableOpacity
             style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
@@ -1361,6 +1502,100 @@ const styles = StyleSheet.create({
   tipoConsultaTextActive: {
     color: colors.white,
   },
+
+  // Estilos para selector de fechas
+  fechasScroll: {
+    marginBottom: 20,
+  },
+  fechaCard: {
+    width: 70,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    marginRight: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    backgroundColor: '#fafafa',
+  },
+  fechaCardActive: {
+    backgroundColor: colors.laPalma,
+    borderColor: colors.laPalma,
+  },
+  fechaDiaSemana: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  fechaDiaNum: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.abbey,
+  },
+  fechaMes: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  fechaTextActive: {
+    color: colors.white,
+  },
+
+  // Estilos para selector de horas
+  horasGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 10,
+  },
+  horaCard: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#fafafa',
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  horaCardActive: {
+    backgroundColor: colors.greenHaze,
+    borderColor: colors.greenHaze,
+  },
+  horaText: {
+    fontSize: 14,
+    color: colors.abbey,
+    fontWeight: '500',
+  },
+  horaTextActive: {
+    color: colors.white,
+  },
+  loadingTurnos: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  loadingTurnosText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  noTurnos: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  noTurnosText: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  noTurnosSubtext: {
+    color: '#999',
+    fontSize: 12,
+    marginTop: 4,
+  },
+
   submitButton: {
     backgroundColor: colors.laPalma,
     paddingVertical: 16,

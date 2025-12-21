@@ -380,7 +380,7 @@ export default function App() {
       if (data.success && data.turnos) {
         // Filtrar solo horas con médicos disponibles
         const horasDisponibles = data.turnos
-          .filter(t => t.medicosDisponibles > 0)
+          .filter(t => t.disponible === true || t.cantidadDisponibles > 0)
           .map(t => t.hora);
         setTurnosDisponibles(horasDisponibles);
       } else {
